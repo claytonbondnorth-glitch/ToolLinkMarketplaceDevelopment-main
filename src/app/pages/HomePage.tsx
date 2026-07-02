@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { Search, ArrowRight, Shield, CheckCircle, MessageCircle, MapPin, Star, Zap, TrendingUp, ChevronRight, ChevronDown } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { CATEGORIES } from '../data/mockData';
+import DynamicStatCounter from '../components/DynamicStatCounter';
+import { getActiveListingsCount, getCitiesCoveredCount, getSalesThisMonthCount, getVerifiedTradesCount } from '../data/listingStats';
 import ListingCard from '../components/ListingCard';
 
 /* Animated counter hook */
@@ -222,10 +224,10 @@ export default function HomePage() {
       <section className="bg-[#111111] border-b border-white/5">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-            <StatCounter value={18543} label="Active Listings" />
-            <StatCounter value={9214} label="Verified Tradies" />
-            <StatCounter value={3821} label="Sales This Month" />
-            <StatCounter value={48} label="Australian Cities" suffix="+" />
+            <DynamicStatCounter initialValue={48} loadValue={getActiveListingsCount} label="Active Listings" />
+            <DynamicStatCounter initialValue={0} loadValue={getVerifiedTradesCount} label="Verified Trades" />
+            <DynamicStatCounter initialValue={0} loadValue={getSalesThisMonthCount} label="Sales This Month" />
+            <DynamicStatCounter initialValue={12} loadValue={getCitiesCoveredCount} label="Cities Covered" suffix="+" />
           </div>
         </div>
       </section>
