@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext';
 import ListingCard from '../components/ListingCard';
 import { supabase } from '../../lib/supabase';
 import UserAvatar from '../components/UserAvatar';
+import { getVerificationBadgeLabel } from '../lib/verification';
 
 const REVIEWS = [
   { id: 'r1', reviewer: 'Dave K.', rating: 5, text: 'Gear was exactly as described. Fast to respond, easy transaction. Would buy again.', date: '2024-11-20' },
@@ -84,6 +85,7 @@ export default function SellerProfilePage() {
   const isOwnProfile = currentUser?.id === seller.id;
   const hasReviews = parsedReviewCount > 0;
   const formattedRating = parsedRating.toFixed(1);
+  const verificationBadgeLabel = getVerificationBadgeLabel(seller);
 
   const handleContact = () => {
     if (!currentUser) { openAuth('login'); return; }
@@ -129,9 +131,9 @@ export default function SellerProfilePage() {
                         <span className="text-sm text-gray-400">New Seller</span>
                       )}
                     </div>
-                    {seller.verified && (
+                    {verificationBadgeLabel && (
                       <span className="flex items-center gap-1 text-xs text-primary font-medium">
-                        <CheckCircle className="w-3.5 h-3.5" /> Verified Tradie
+                        <CheckCircle className="w-3.5 h-3.5" /> {verificationBadgeLabel}
                       </span>
                     )}
                   </div>

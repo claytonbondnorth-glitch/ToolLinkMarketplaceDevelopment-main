@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { useApp } from '../context/AppContext';
 import ListingCard from '../components/ListingCard';
 import UserAvatar from '../components/UserAvatar';
+import { getVerificationBadgeLabel } from '../lib/verification';
 
 function timeAgo(dateStr: string): string {
   const date = new Date(dateStr);
@@ -19,6 +20,7 @@ export default function ListingDetailPage() {
   const { navParams, navigate, listings, toggleSave, savedIds, currentUser, openAuth, startConversation, users, conversations, updateListingStatus } = useApp();
   const listing = listings.find((l) => l.id === navParams.listingId) ?? listings[0];
   const seller = users.find((u) => u.id === listing?.sellerId);
+  const verificationBadgeLabel = seller ? getVerificationBadgeLabel(seller) : null;
 
   const [imgIndex, setImgIndex] = useState(0);
   const [showContact, setShowContact] = useState(false);
@@ -91,9 +93,13 @@ export default function ListingDetailPage() {
 
     setIsMarkingSold(true);
     try {
-      await updateListingStatus(listing.id, 'sold', selectedBuyerId);
+      const result = await updateListingStatus(listing.id, 'pending_completion', selectedBuyerId);
+      if (!result.success) {
+        toast.error(result.errorMessage || 'Unable to mark listing as sold right now.');
+        return;
+      }
       setShowSoldModal(false);
-      toast.success('Listing marked as sold.');
+      toast.success('Sale marked as pending buyer confirmation.');
     } finally {
       setIsMarkingSold(false);
     }
@@ -301,10 +307,10 @@ export default function ListingDetailPage() {
                       <span className="text-sm font-semibold">{seller.rating}</span>
                       <span className="text-xs text-muted-foreground">({seller.reviewCount} reviews)</span>
                     </div>
-                    {seller.verified && (
+                    {verificationBadgeLabel && (
                       <div className="flex items-center gap-1 mt-1">
                         <CheckCircle className="w-3 h-3 text-primary" />
-                        <span className="text-xs text-primary font-medium">Verified Tradie</span>
+                        <span className="text-xs text-primary font-medium">{verificationBadgeLabel}</span>
                       </div>
                     )}
                   </div>

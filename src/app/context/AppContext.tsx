@@ -18,6 +18,8 @@ export interface AppUser {
   bio: string;
   phone: string;
   verified: boolean;
+  verifiedMember: boolean;
+  verificationType: 'tradie' | 'business' | null;
   isAdmin: boolean;
   rating: number;
   reviewCount: number;
@@ -41,6 +43,8 @@ export interface AppListing {
   images: string[];
   sellerId: string;
   soldToUserId?: string | null;
+  soldAt?: string | null;
+  completedAt?: string | null;
   dateListed: string;
   views: number;
   featured: boolean;
@@ -59,9 +63,14 @@ export interface AppMessage {
 export interface AppConversation {
   id: string;
   participantIds: [string, string];
-  listingId: string;
+  listingId: string | null;
   messages: AppMessage[];
 }
+
+type ListingStatusUpdateResult = {
+  success: boolean;
+  errorMessage?: string;
+};
 
 interface NavParams {
   listingId?: string;
@@ -102,7 +111,8 @@ interface AppContextValue {
 
   users: AppUser[];
   refreshUserProfiles: (userIds?: string[]) => Promise<void>;
-  updateListingStatus: (listingId: string, status: string, soldToUserId?: string | null) => Promise<void>;
+  updateListingStatus: (listingId: string, status: string, soldToUserId?: string | null) => Promise<ListingStatusUpdateResult>;
+  confirmListingCompletion: (listingId: string) => Promise<ListingStatusUpdateResult>;
   deleteListingAdmin: (listingId: string) => Promise<void>;
   deleteUserAdmin: (userId: string) => Promise<void>;
 
@@ -123,6 +133,8 @@ function rowToUser(row: any): AppUser {
     bio: row.bio ?? '',
     phone: row.phone ?? '',
     verified: row.verified ?? false,
+    verifiedMember: row.verified_member ?? false,
+    verificationType: row.verification_type ?? null,
     isAdmin: row.is_admin ?? false,
     rating: row.rating ?? 0,
     reviewCount: row.review_count ?? 0,
@@ -148,6 +160,8 @@ function rowToListing(row: any): AppListing {
     images: row.images ?? [],
     sellerId: row.seller_id ?? '',
     soldToUserId: row.sold_to_user_id ?? null,
+    soldAt: row.sold_at ?? null,
+    completedAt: row.completed_at ?? null,
     dateListed: row.created_at ?? new Date().toISOString(),
     views: row.views ?? 0,
     featured: row.featured ?? false,
@@ -342,6 +356,42 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!currentUser || !schemaReady) return;
     fetchConversations();
+  }, [currentUser?.id, schemaReady]);
+
+  useEffect(() => {
+    if (!currentUser || !schemaReady) return;
+
+    const channel = supabase.channel(`conversations-live-${currentUser.id}`);
+
+    channel.on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'messages',
+      },
+      () => {
+        fetchConversations();
+      }
+    );
+
+    channel.on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'conversations',
+      },
+      () => {
+        fetchConversations();
+      }
+    );
+
+    channel.subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [currentUser?.id, schemaReady]);
 
   async function fetchConversations() {
@@ -631,10 +681,197 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [currentUser, conversations]);
 
   // ── Admin ─────────────────────────────────────────────────────────────────────
-  const updateListingStatus = useCallback(async (listingId: string, status: string, soldToUserId?: string | null) => {
-    await supabase.from('listings').update({ status, sold_to_user_id: soldToUserId ?? null }).eq('id', listingId);
-    setListings(prev => prev.map(l => l.id === listingId ? { ...l, status, soldToUserId: soldToUserId ?? null } : l));
-  }, []);
+  const updateListingStatus = useCallback(async (listingId: string, status: string, soldToUserId?: string | null): Promise<ListingStatusUpdateResult> => {
+    const listing = listings.find((item) => item.id === listingId);
+
+    if ((status === 'sold' || status === 'pending_completion') && !currentUser?.id) {
+      return { success: false, errorMessage: 'You must be signed in to mark a listing as sold.' };
+    }
+
+    const listingUpdatePayload: Record<string, any> = {
+      status,
+      sold_to_user_id: soldToUserId ?? null,
+    };
+
+    if (status === 'sold' || status === 'pending_completion') {
+      listingUpdatePayload.sold_at = new Date().toISOString();
+    }
+
+    let listingStatusQuery = supabase
+      .from('listings')
+      .update(listingUpdatePayload)
+      .eq('id', listingId);
+
+    if (status === 'sold' || status === 'pending_completion') {
+      // Sold transitions must be saved by the listing owner only.
+      listingStatusQuery = listingStatusQuery.eq('seller_id', currentUser!.id);
+    }
+
+    const { data: updatedListingRow, error: listingUpdateError } = await listingStatusQuery
+      .select('*')
+      .maybeSingle();
+
+    if (listingUpdateError) {
+      console.error('Failed to update listing status:', listingUpdateError);
+      return { success: false, errorMessage: listingUpdateError.message };
+    }
+
+    if (!updatedListingRow) {
+      const notFoundMessage = 'Listing update failed: listing not found or permission denied.';
+      console.error(notFoundMessage);
+      return { success: false, errorMessage: notFoundMessage };
+    }
+
+    const { data: persistedListingRow, error: persistedListingError } = await supabase
+      .from('listings')
+      .select('*')
+      .eq('id', listingId)
+      .maybeSingle();
+
+    if (persistedListingError) {
+      console.error('Failed to refetch listing after status update:', persistedListingError);
+      return { success: false, errorMessage: persistedListingError.message };
+    }
+
+    if (!persistedListingRow) {
+      const missingListingMessage = 'Listing update failed: could not confirm listing after update.';
+      console.error(missingListingMessage);
+      return { success: false, errorMessage: missingListingMessage };
+    }
+
+    if (status === 'sold') {
+      const soldPersisted = persistedListingRow.status === 'sold' && persistedListingRow.sold_to_user_id === (soldToUserId ?? null);
+      if (!soldPersisted) {
+        const mismatchMessage = 'Listing update failed: sold status was not persisted correctly.';
+        console.error(mismatchMessage, {
+          persistedStatus: persistedListingRow.status,
+          persistedSoldToUserId: persistedListingRow.sold_to_user_id,
+        });
+        return { success: false, errorMessage: mismatchMessage };
+      }
+    }
+
+    if (status === 'pending_completion') {
+      const pendingPersisted =
+        persistedListingRow.status === 'pending_completion'
+        && persistedListingRow.sold_to_user_id === (soldToUserId ?? null);
+
+      if (!pendingPersisted) {
+        const mismatchMessage = 'Listing update failed: pending completion status was not persisted correctly.';
+        console.error(mismatchMessage, {
+          persistedStatus: persistedListingRow.status,
+          persistedSoldToUserId: persistedListingRow.sold_to_user_id,
+        });
+        return { success: false, errorMessage: mismatchMessage };
+      }
+    }
+
+    setListings((prev) => prev.map((item) => item.id === listingId ? {
+      ...rowToListing(persistedListingRow),
+    } : item));
+
+    const transitionedToSold = status === 'sold' && listing?.status !== 'sold';
+    if (!transitionedToSold || !listing?.sellerId) return { success: true };
+
+    const { data: profileRow, error: profileSelectError } = await supabase
+      .from('profiles')
+      .select('total_listings')
+      .eq('id', listing.sellerId)
+      .single();
+
+    if (profileSelectError) {
+      console.error('Failed to read seller sold count:', profileSelectError);
+      return { success: true };
+    }
+
+    const nextTotalSold = (profileRow?.total_listings ?? 0) + 1;
+    const { error: profileUpdateError } = await supabase
+      .from('profiles')
+      .update({ total_listings: nextTotalSold })
+      .eq('id', listing.sellerId);
+
+    if (profileUpdateError) {
+      console.error('Failed to update seller sold count:', profileUpdateError);
+      return { success: true };
+    }
+
+    setUsers((prev) => prev.map((user) => user.id === listing.sellerId ? { ...user, totalListings: nextTotalSold } : user));
+    setCurrentUser((prev) => prev && prev.id === listing.sellerId ? { ...prev, totalListings: nextTotalSold } : prev);
+    return { success: true };
+  }, [listings, currentUser?.id]);
+
+  const confirmListingCompletion = useCallback(async (listingId: string): Promise<ListingStatusUpdateResult> => {
+    if (!currentUser?.id) {
+      return { success: false, errorMessage: 'You must be signed in to confirm a purchase.' };
+    }
+
+    const listing = listings.find((item) => item.id === listingId);
+    if (!listing) {
+      return { success: false, errorMessage: 'Listing not found.' };
+    }
+
+    const completionTimestamp = new Date().toISOString();
+
+    const { data: updatedListingRow, error: listingUpdateError } = await supabase
+      .from('listings')
+      .update({ status: 'sold', completed_at: completionTimestamp })
+      .eq('id', listingId)
+      .eq('sold_to_user_id', currentUser.id)
+      .eq('status', 'pending_completion')
+      .select('*')
+      .maybeSingle();
+
+    if (listingUpdateError) {
+      console.error('Failed to confirm listing completion:', listingUpdateError);
+      return { success: false, errorMessage: listingUpdateError.message };
+    }
+
+    if (!updatedListingRow) {
+      const notFoundMessage = 'Listing completion failed: listing not found or permission denied.';
+      console.error(notFoundMessage);
+      return { success: false, errorMessage: notFoundMessage };
+    }
+
+    const { data: persistedListingRow, error: persistedListingError } = await supabase
+      .from('listings')
+      .select('*')
+      .eq('id', listingId)
+      .maybeSingle();
+
+    if (persistedListingError) {
+      console.error('Failed to refetch listing after completion confirmation:', persistedListingError);
+      return { success: false, errorMessage: persistedListingError.message };
+    }
+
+    if (!persistedListingRow || persistedListingRow.status !== 'sold') {
+      const mismatchMessage = 'Listing completion failed: sold status was not persisted.';
+      console.error(mismatchMessage);
+      return { success: false, errorMessage: mismatchMessage };
+    }
+
+    setListings((prev) => prev.map((item) => item.id === listingId ? { ...rowToListing(persistedListingRow) } : item));
+
+    const { data: profileRow, error: profileSelectError } = await supabase
+      .from('profiles')
+      .select('total_listings')
+      .eq('id', listing.sellerId)
+      .single();
+
+    if (!profileSelectError) {
+      const nextTotalSold = (profileRow?.total_listings ?? 0) + 1;
+      const { error: profileUpdateError } = await supabase
+        .from('profiles')
+        .update({ total_listings: nextTotalSold })
+        .eq('id', listing.sellerId);
+
+      if (!profileUpdateError) {
+        setUsers((prev) => prev.map((user) => user.id === listing.sellerId ? { ...user, totalListings: nextTotalSold } : user));
+        setCurrentUser((prev) => prev && prev.id === listing.sellerId ? { ...prev, totalListings: nextTotalSold } : prev);
+      }
+    }
+
+    return { success: true };
+  }, [currentUser?.id, listings]);
 
   const deleteListingAdmin = useCallback(async (listingId: string) => {
     await supabase.from('listings').delete().eq('id', listingId);
@@ -662,7 +899,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       showAuth, authMode, openAuth, closeAuth,
       listings, listingsLoading, savedIds, toggleSave, addListing, deleteListing,
       conversations, sendMessage, startConversation, markConversationAsRead, unreadCount,
-      users, updateListingStatus, deleteListingAdmin, deleteUserAdmin,
+      users, refreshUserProfiles, updateListingStatus, confirmListingCompletion, deleteListingAdmin, deleteUserAdmin,
       schemaReady, schemaError,
     }}>
       {children}

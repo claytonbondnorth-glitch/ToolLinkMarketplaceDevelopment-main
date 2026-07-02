@@ -1,6 +1,6 @@
 export type Condition = 'New' | 'Used - Like New' | 'Used - Good' | 'Used - Fair' | 'For Parts';
 export type AusState = 'NSW' | 'VIC' | 'QLD' | 'WA' | 'SA' | 'TAS' | 'NT' | 'ACT';
-export type ListingStatus = 'active' | 'sold' | 'pending' | 'flagged';
+export type ListingStatus = 'active' | 'sold' | 'pending' | 'flagged' | 'pending_completion';
 
 export interface Category {
   id: string;

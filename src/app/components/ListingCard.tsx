@@ -1,6 +1,7 @@
 import { Heart, MapPin, Eye, Star, ArrowRight, CheckCircle } from 'lucide-react';
 import { useApp, AppListing } from '../context/AppContext';
 import UserAvatar from './UserAvatar';
+import { getVerificationBadgeLabel } from '../lib/verification';
 
 interface ListingCardProps {
   listing: AppListing;
@@ -29,6 +30,7 @@ export default function ListingCard({ listing, compact = false }: ListingCardPro
   const { navigate, toggleSave, savedIds, users } = useApp();
   const isSaved = savedIds.has(listing.id);
   const seller = users.find((u) => u.id === listing.sellerId);
+  const verificationBadgeLabel = seller ? getVerificationBadgeLabel(seller) : null;
 
   return (
     <article
@@ -127,10 +129,10 @@ export default function ListingCard({ listing, compact = false }: ListingCardPro
           >
             <UserAvatar src={seller.avatar || undefined} name={seller.name} alt={seller.name} className="w-6 h-6 rounded-full object-cover flex-shrink-0 ring-1 ring-border" />
             <span className="text-xs text-muted-foreground hover:text-primary transition-colors flex-1 truncate">{seller.name}</span>
-            {seller.verified && (
+            {verificationBadgeLabel && (
               <span className="flex items-center gap-1 text-[11px] text-primary font-semibold flex-shrink-0">
                 <CheckCircle className="w-3 h-3 fill-primary text-white" />
-                Verified
+                {verificationBadgeLabel}
               </span>
             )}
             {seller.rating > 0 && (

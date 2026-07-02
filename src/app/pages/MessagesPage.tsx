@@ -4,6 +4,17 @@ import { toast } from 'sonner';
 import { useApp } from '../context/AppContext';
 import { supabase } from '../../lib/supabase';
 import UserAvatar from '../components/UserAvatar';
+import { getVerificationBadgeLabel } from '../lib/verification';
+
+const VERIFICATION_APPROVAL_PHRASE = 'Your ToolLink verification has been approved';
+
+function isVerificationApprovalMessage(text: string) {
+  return text.includes(VERIFICATION_APPROVAL_PHRASE);
+}
+
+function isToolLinkVerificationConversation(conversation: { listingId: string | null; messages: { text: string }[] }) {
+  return !conversation.listingId && conversation.messages.some((message) => isVerificationApprovalMessage(message.text));
+}
 
 function TypingIndicator() {
   return (
@@ -32,7 +43,7 @@ function formatTime(ts: string) {
 }
 
 export default function MessagesPage() {
-  const { currentUser, conversations, listings, sendMessage, navigate, openAuth, navParams, users, markConversationAsRead, refreshUserProfiles } = useApp();
+  const { currentUser, conversations, listings, sendMessage, navigate, openAuth, navParams, users, markConversationAsRead, refreshUserProfiles, confirmListingCompletion } = useApp();
   const [activeConvId, setActiveConvId] = useState<string | null>(navParams.conversationId ?? null);
   const [input, setInput] = useState('');
   const [search, setSearch] = useState('');
@@ -43,6 +54,7 @@ export default function MessagesPage() {
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [confirmingCompletion, setConfirmingCompletion] = useState(false);
   const [hasReviewedCurrentListing, setHasReviewedCurrentListing] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -76,9 +88,10 @@ export default function MessagesPage() {
     const listing = listings.find((l) => l.id === c.listingId);
     const otherId = c.participantIds.find((id) => id !== currentUser.id);
     const other = users.find((u) => u.id === otherId);
+    const displayName = isToolLinkVerificationConversation(c) ? 'ToolLink' : other?.name ?? '';
     return (
       listing?.title.toLowerCase().includes(search.toLowerCase()) ||
-      other?.name.toLowerCase().includes(search.toLowerCase())
+      displayName.toLowerCase().includes(search.toLowerCase())
     );
   });
 
@@ -86,6 +99,8 @@ export default function MessagesPage() {
   const activeListing = activeConv ? listings.find((l) => l.id === activeConv.listingId) : null;
   const otherParticipantId = activeConv?.participantIds.find((id) => id !== currentUser.id);
   const otherParticipant = users.find((u) => u.id === otherParticipantId);
+  const isToolLinkConversation = Boolean(activeConv && isToolLinkVerificationConversation(activeConv));
+  const otherParticipantVerificationBadge = otherParticipant ? getVerificationBadgeLabel(otherParticipant) : null;
   const isSaleConversation = Boolean(
     activeConv &&
     activeListing &&
@@ -93,6 +108,21 @@ export default function MessagesPage() {
     activeListing.soldToUserId &&
     activeConv.participantIds.includes(activeListing.sellerId) &&
     activeConv.participantIds.includes(activeListing.soldToUserId)
+  );
+  const isPendingCompletionConversation = Boolean(
+    activeConv
+    && activeListing
+    && activeListing.status === 'pending_completion'
+    && activeListing.soldToUserId
+    && activeConv.participantIds.includes(activeListing.sellerId)
+    && activeConv.participantIds.includes(activeListing.soldToUserId)
+  );
+  const canBuyerConfirmCompletion = Boolean(
+    isPendingCompletionConversation
+    && currentUser
+    && activeListing
+    && activeListing.soldToUserId === currentUser.id
+    && currentUser.id !== activeListing.sellerId
   );
   const isBuyerReview = Boolean(currentUser && activeListing && currentUser.id === activeListing.soldToUserId && currentUser.id !== activeListing.sellerId);
   const reviewTargetUser = isBuyerReview
@@ -115,6 +145,22 @@ export default function MessagesPage() {
     setOfferPrice('');
     setTimeout(() => setIsTyping(true), 1000);
     setTimeout(() => setIsTyping(false), 3500);
+  };
+
+  const handleConfirmPurchaseCompleted = async () => {
+    if (!activeListing) return;
+
+    setConfirmingCompletion(true);
+    try {
+      const result = await confirmListingCompletion(activeListing.id);
+      if (!result.success) {
+        toast.error(result.errorMessage || 'Unable to confirm purchase completion right now.');
+        return;
+      }
+      toast.success('Purchase marked as completed. Reviews are now available.');
+    } finally {
+      setConfirmingCompletion(false);
+    }
   };
 
   useEffect(() => {
@@ -247,9 +293,13 @@ export default function MessagesPage() {
               const listing = listings.find((l) => l.id === conv.listingId);
               const otherId = conv.participantIds.find((id) => id !== currentUser.id);
               const other = users.find((u) => u.id === otherId);
+              const isToolLinkSystemConversation = isToolLinkVerificationConversation(conv);
+              const otherVerificationBadge = other ? getVerificationBadgeLabel(other) : null;
               const lastMsg = conv.messages[conv.messages.length - 1];
               const unread = conv.messages.filter((m) => m.senderId !== currentUser.id && !m.read).length;
               const isActive = conv.id === activeConvId;
+              const displayName = isToolLinkSystemConversation ? 'ToolLink' : other?.name;
+              const displayLocation = isToolLinkSystemConversation ? 'System notifications' : listing?.title;
 
               return (
                 <button
@@ -271,10 +321,15 @@ export default function MessagesPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-0.5">
-                        <p className="text-sm font-semibold text-foreground truncate">{other?.name}</p>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <p className="text-sm font-semibold text-foreground truncate">{displayName}</p>
+                          {otherVerificationBadge && !isToolLinkSystemConversation && (
+                            <span className="text-[10px] text-primary font-semibold whitespace-nowrap">{otherVerificationBadge}</span>
+                          )}
+                        </div>
                         <p className="text-xs text-muted-foreground flex-shrink-0 ml-2">{lastMsg && formatTime(lastMsg.timestamp)}</p>
                       </div>
-                      <p className="text-xs text-muted-foreground truncate">{listing?.title}</p>
+                      <p className="text-xs text-muted-foreground truncate">{displayLocation}</p>
                       {lastMsg && (
                         <p className={`text-xs mt-0.5 truncate ${unread > 0 ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}>
                           {lastMsg.senderId === currentUser.id ? 'You: ' : ''}{lastMsg.text}
@@ -298,14 +353,26 @@ export default function MessagesPage() {
               <button onClick={() => setActiveConvId(null)} className="sm:hidden p-1.5 rounded-lg hover:bg-muted transition-colors">
                 <ArrowLeft className="w-5 h-5" />
               </button>
-              {otherParticipant && (
+              {otherParticipant && !isToolLinkConversation && (
                 <button onClick={() => navigate('seller', { userId: otherParticipant.id })} className="flex items-center gap-3 hover:opacity-80 transition-opacity">
                   <UserAvatar src={otherParticipant.avatar || undefined} name={otherParticipant.name} alt={otherParticipant.name} className="w-9 h-9 rounded-full object-cover" />
                   <div className="min-w-0">
                     <p className="text-sm font-bold text-foreground">{otherParticipant.name}</p>
                     <p className="text-xs text-muted-foreground">{otherParticipant.location}</p>
+                    {otherParticipantVerificationBadge && (
+                      <p className="text-[11px] text-primary font-semibold">{otherParticipantVerificationBadge}</p>
+                    )}
                   </div>
                 </button>
+              )}
+              {isToolLinkConversation && (
+                <div className="flex items-center gap-3">
+                  <UserAvatar src={undefined} name="ToolLink" alt="ToolLink" className="w-9 h-9 rounded-full object-cover" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-foreground">ToolLink</p>
+                    <p className="text-xs text-muted-foreground">System notifications</p>
+                  </div>
+                </div>
               )}
               {activeListing && (
                 <button
@@ -326,11 +393,12 @@ export default function MessagesPage() {
               {activeConv.messages.map((msg) => {
                 const isMe = msg.senderId === currentUser.id;
                 const sender = isMe ? currentUser : users.find((u) => u.id === msg.senderId);
+                const showToolLinkSender = !isMe && isVerificationApprovalMessage(msg.text);
                 const isOffer = msg.text.startsWith('💰 Offer:');
                 return (
                   <div key={msg.id} className={`flex items-end gap-2 ${isMe ? 'flex-row-reverse' : ''}`}>
                     {!isMe && (
-                      <UserAvatar src={sender?.avatar || undefined} name={sender?.name} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
+                      <UserAvatar src={showToolLinkSender ? undefined : sender?.avatar || undefined} name={showToolLinkSender ? 'ToolLink' : sender?.name} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
                     )}
                     <div className={`max-w-xs sm:max-w-sm lg:max-w-md ${isMe ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
                       <div className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed shadow-sm ${
@@ -351,6 +419,35 @@ export default function MessagesPage() {
               {isTyping && <TypingIndicator />}
               <div ref={messagesEndRef} />
             </div>
+
+            {isPendingCompletionConversation && (
+              <div className="bg-white border-b border-[#EBEBEB] px-4 py-3 flex-shrink-0">
+                <div className="rounded-2xl border border-[#EBEBEB] bg-muted/70 p-4">
+                  <div className="flex items-start gap-2">
+                    <div className="rounded-full bg-primary/10 p-2 text-primary">
+                      <Package className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-foreground">Seller marked this item as sold to you. Did this sale complete?</p>
+                      <p className="text-xs text-muted-foreground mt-1">Confirm when the transaction is fully completed so both sides can leave a review.</p>
+                      {canBuyerConfirmCompletion ? (
+                        <button
+                          onClick={handleConfirmPurchaseCompleted}
+                          disabled={confirmingCompletion}
+                          className="mt-3 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-white px-3 py-1.5 text-sm font-semibold text-primary hover:bg-accent transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                          {confirmingCompletion ? 'Confirming…' : 'Confirm Purchase Completed'}
+                        </button>
+                      ) : (
+                        <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-muted px-3 py-1.5 text-sm font-semibold text-muted-foreground">
+                          Waiting for buyer confirmation
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {isSaleConversation && (
               <div className="bg-white border-b border-[#EBEBEB] px-4 py-3 flex-shrink-0">

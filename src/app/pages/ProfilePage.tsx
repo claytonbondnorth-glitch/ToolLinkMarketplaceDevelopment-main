@@ -5,19 +5,39 @@ import { useApp } from '../context/AppContext';
 import ListingCard from '../components/ListingCard';
 import { supabase } from '../../lib/supabase';
 import UserAvatar from '../components/UserAvatar';
+import { getVerificationBadgeLabel } from '../lib/verification';
 
 type Tab = 'listings' | 'saved' | 'settings';
 
 const STATES = ['NSW', 'VIC', 'QLD', 'WA', 'SA', 'TAS', 'NT', 'ACT'];
 
+type VerificationApplicationStatus = 'pending' | 'approved' | 'rejected' | null;
+type VerificationApplicationType = 'tradie' | 'business';
+
 export default function ProfilePage() {
-  const { currentUser, updateProfile, listings, savedIds, navigate, openAuth, logout } = useApp();
+  const { currentUser, updateProfile, listings, savedIds, navigate, openAuth, logout, refreshUserProfiles } = useApp();
   const [tab, setTab] = useState<Tab>('listings');
   const [editing, setEditing] = useState(false);
   const [saved, setSaved] = useState(false);
   const [profileStats, setProfileStats] = useState({ reviewCount: 0, averageRating: 0 });
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [submittingVerification, setSubmittingVerification] = useState(false);
+  const [showVerificationSuccessScreen, setShowVerificationSuccessScreen] = useState(false);
+  const [latestVerificationStatus, setLatestVerificationStatus] = useState<VerificationApplicationStatus>(null);
+  const [verificationForm, setVerificationForm] = useState({
+    verificationType: 'tradie' as VerificationApplicationType,
+    fullName: currentUser?.name ?? '',
+    businessName: '',
+    trade: '',
+    abn: '',
+    licenceNumber: '',
+    state: currentUser?.state ?? 'NSW',
+    website: '',
+    notes: '',
+  });
+  const [verificationDocument, setVerificationDocument] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const verificationStatusCardRef = useRef<HTMLDivElement | null>(null);
 
   const [editForm, setEditForm] = useState({
     name: currentUser?.name ?? '',
@@ -44,6 +64,36 @@ export default function ProfilePage() {
   const savedListings = listings.filter((l) => savedIds.has(l.id));
   const hasReviews = profileStats.reviewCount > 0;
   const formattedRating = profileStats.averageRating.toFixed(1);
+  const verificationBadgeLabel = getVerificationBadgeLabel(currentUser);
+
+  const verificationStatusDisplay = verificationBadgeLabel
+    ? verificationBadgeLabel === 'Verified Business'
+      ? '🔵 Verified Business'
+      : verificationBadgeLabel === 'Verified Tradie'
+        ? '🟢 Verified Tradie'
+        : '🟢 Verified Member'
+    : latestVerificationStatus === 'pending'
+      ? '🟡 Pending Review'
+      : latestVerificationStatus === 'rejected'
+        ? '🔴 Rejected'
+        : 'Unverified';
+
+  const loadLatestVerificationApplication = useCallback(async (userId: string) => {
+    const { data, error } = await supabase
+      .from('verification_applications')
+      .select('status')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      setLatestVerificationStatus(null);
+      return;
+    }
+
+    setLatestVerificationStatus((data?.status as VerificationApplicationStatus) ?? null);
+  }, []);
 
   const loadProfileStats = useCallback(async (userId: string) => {
     const { data, error } = await supabase
@@ -90,6 +140,45 @@ export default function ProfilePage() {
       supabase.removeChannel(channel);
     };
   }, [currentUser?.id, loadProfileStats]);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    void loadLatestVerificationApplication(currentUser.id);
+
+    const channel = supabase.channel(`verification-status-${currentUser.id}`);
+    channel.on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'verification_applications',
+        filter: `user_id=eq.${currentUser.id}`,
+      },
+      () => {
+        void loadLatestVerificationApplication(currentUser.id);
+      }
+    );
+
+    channel.on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'profiles',
+        filter: `id=eq.${currentUser.id}`,
+      },
+      () => {
+        void refreshUserProfiles([currentUser.id]);
+      }
+    );
+
+    channel.subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentUser?.id, loadLatestVerificationApplication, refreshUserProfiles]);
 
   const setEdit = (field: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     setEditForm((prev) => ({ ...prev, [field]: e.target.value }));
@@ -142,6 +231,74 @@ export default function ProfilePage() {
     }
   };
 
+  const setVerificationField = (field: keyof typeof verificationForm) => (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+  ) => setVerificationForm((prev) => ({ ...prev, [field]: e.target.value }));
+
+  const handleVerificationDocumentChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    setVerificationDocument(file);
+  };
+
+  const handleSubmitVerification = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!currentUser?.id) {
+      openAuth('login');
+      return;
+    }
+
+    if (!verificationDocument) {
+      toast.error('Please upload a supporting document or photo.');
+      return;
+    }
+
+    setSubmittingVerification(true);
+    setShowVerificationSuccessScreen(false);
+
+    try {
+      const ext = verificationDocument.name.split('.').pop() ?? 'jpg';
+      const baseName = verificationDocument.name
+        .replace(/\.[^/.]+$/, '')
+        .replace(/[^a-zA-Z0-9._-]/g, '_');
+      const filePath = `${currentUser.id}/${Date.now()}-${baseName}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage.from('verification-documents').upload(filePath, verificationDocument, {
+        cacheControl: '3600',
+        upsert: true,
+      });
+
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrlData } = supabase.storage.from('verification-documents').getPublicUrl(filePath);
+
+      const { error: insertError } = await supabase.from('verification_applications').insert({
+        user_id: currentUser.id,
+        verification_type: verificationForm.verificationType,
+        full_name: verificationForm.fullName,
+        business_name: verificationForm.businessName,
+        trade: verificationForm.trade,
+        abn: verificationForm.abn,
+        licence_number: verificationForm.licenceNumber,
+        state: verificationForm.state,
+        website: verificationForm.website || null,
+        notes: verificationForm.notes,
+        document_url: publicUrlData.publicUrl,
+        status: 'pending',
+      });
+
+      if (insertError) throw insertError;
+
+      setLatestVerificationStatus('pending');
+      setShowVerificationSuccessScreen(true);
+      setVerificationDocument(null);
+      setVerificationForm((prev) => ({ ...prev, website: '', notes: '' }));
+    } catch (error: any) {
+      toast.error(error?.message || 'Unable to submit verification right now.');
+    } finally {
+      setSubmittingVerification(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-muted">
       {/* Profile header */}
@@ -184,9 +341,9 @@ export default function ProfilePage() {
                     ) : (
                       <span className="text-sm text-gray-400">New User</span>
                     )}
-                    {currentUser.verified && (
+                    {verificationBadgeLabel && (
                       <span className="flex items-center gap-1 text-xs text-primary font-medium">
-                        <CheckCircle className="w-3.5 h-3.5" /> Verified
+                        <CheckCircle className="w-3.5 h-3.5" /> {verificationBadgeLabel}
                       </span>
                     )}
                   </div>
@@ -345,9 +502,126 @@ export default function ProfilePage() {
                 </div>
                 <div className="flex justify-between py-2 border-b border-border">
                   <span className="text-muted-foreground">Account type</span>
-                  <span className="font-medium">{currentUser.isAdmin ? 'Administrator' : currentUser.verified ? 'Verified Tradie' : 'Standard'}</span>
+                  <span className="font-medium">{currentUser.isAdmin ? 'Administrator' : verificationBadgeLabel ?? 'Standard'}</span>
                 </div>
               </div>
+            </div>
+
+            <div ref={verificationStatusCardRef} className="bg-white rounded-xl border border-border p-6">
+              <h3 className="font-bold text-foreground mb-2">Verification Status</h3>
+              <p className="text-sm font-semibold text-foreground">{verificationStatusDisplay}</p>
+            </div>
+
+            <div className="bg-white rounded-xl border border-border p-6">
+              <h3 className="font-bold text-foreground mb-1">Get Verified</h3>
+              <p className="text-sm text-muted-foreground mb-4">Apply for Verified Tradie or Verified Business status.</p>
+
+              {showVerificationSuccessScreen ? (
+                <div className="rounded-xl border border-border bg-muted/40 p-5">
+                  <h4 className="text-base font-bold text-foreground mb-2">✅ Verification Application Submitted</h4>
+                  <div className="text-sm text-muted-foreground space-y-1.5">
+                    <p>Thank you for applying for verification.</p>
+                    <p>Your application has been successfully received by ToolLink.</p>
+                    <p>Our team will review your application and supporting documents.</p>
+                    <p>You will receive a message from ToolLink once your application has been approved or if we require additional information.</p>
+                  </div>
+                  <div className="mt-4 rounded-xl border border-border bg-white px-4 py-3">
+                    <p className="text-xs text-muted-foreground mb-1">Current Status:</p>
+                    <p className="text-sm font-semibold text-foreground">🟡 Pending Review</p>
+                  </div>
+                  <div className="mt-4 flex flex-col sm:flex-row gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowVerificationSuccessScreen(false);
+                        verificationStatusCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }}
+                      className="px-4 py-2.5 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-orange-600 transition-colors"
+                    >
+                      View Application Status
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowVerificationSuccessScreen(false);
+                        setTab('listings');
+                      }}
+                      className="px-4 py-2.5 border border-border text-foreground text-sm font-semibold rounded-xl hover:border-primary transition-colors"
+                    >
+                      Return to Profile
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <form onSubmit={handleSubmitVerification} className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-foreground mb-1.5">Verification type</label>
+                    <select
+                      value={verificationForm.verificationType}
+                      onChange={setVerificationField('verificationType')}
+                      className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    >
+                      <option value="tradie">Verified Tradie</option>
+                      <option value="business">Verified Business</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-foreground mb-1.5">Full name</label>
+                    <input required value={verificationForm.fullName} onChange={setVerificationField('fullName')} className="w-full px-3 py-2.5 rounded-xl border border-border bg-input-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-foreground mb-1.5">Business name</label>
+                    <input value={verificationForm.businessName} onChange={setVerificationField('businessName')} className="w-full px-3 py-2.5 rounded-xl border border-border bg-input-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-foreground mb-1.5">Trade/category</label>
+                    <input required value={verificationForm.trade} onChange={setVerificationField('trade')} className="w-full px-3 py-2.5 rounded-xl border border-border bg-input-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-foreground mb-1.5">ABN</label>
+                    <input required value={verificationForm.abn} onChange={setVerificationField('abn')} className="w-full px-3 py-2.5 rounded-xl border border-border bg-input-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-foreground mb-1.5">Licence number</label>
+                    <input required value={verificationForm.licenceNumber} onChange={setVerificationField('licenceNumber')} className="w-full px-3 py-2.5 rounded-xl border border-border bg-input-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-foreground mb-1.5">State/Territory</label>
+                    <select value={verificationForm.state} onChange={setVerificationField('state')} className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
+                      {STATES.map((s) => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-foreground mb-1.5">Website (optional)</label>
+                    <input value={verificationForm.website} onChange={setVerificationField('website')} placeholder="https://" className="w-full px-3 py-2.5 rounded-xl border border-border bg-input-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-foreground mb-1.5">Notes/message</label>
+                    <textarea value={verificationForm.notes} onChange={setVerificationField('notes')} rows={3} className="w-full px-3 py-2.5 rounded-xl border border-border bg-input-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-foreground mb-1.5">Upload supporting document/photo</label>
+                    <input required type="file" accept="image/*,application/pdf" onChange={handleVerificationDocumentChange} className="w-full text-sm" />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={submittingVerification}
+                    className="w-full py-3 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-orange-600 transition-colors disabled:opacity-70"
+                  >
+                    {submittingVerification ? 'Submitting...' : 'Submit Verification'}
+                  </button>
+                </form>
+              )}
             </div>
 
             <div className="bg-white rounded-xl border border-border p-6">
