@@ -1,0 +1,404 @@
+import { useState, useEffect, useRef } from 'react';
+import { Search, ArrowRight, Shield, CheckCircle, MessageCircle, MapPin, Star, Zap, TrendingUp, ChevronRight, ChevronDown } from 'lucide-react';
+import { useApp } from '../context/AppContext';
+import { CATEGORIES } from '../data/mockData';
+import ListingCard from '../components/ListingCard';
+
+/* Animated counter hook */
+function useCounter(target: number, duration = 1800, start = false) {
+  const [value, setValue] = useState(0);
+  useEffect(() => {
+    if (!start) return;
+    const step = Math.ceil(target / (duration / 16));
+    let current = 0;
+    const timer = setInterval(() => {
+      current = Math.min(current + step, target);
+      setValue(current);
+      if (current >= target) clearInterval(timer);
+    }, 16);
+    return () => clearInterval(timer);
+  }, [target, duration, start]);
+  return value;
+}
+
+function StatCounter({ value, label, suffix = '' }: { value: number; label: string; suffix?: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [started, setStarted] = useState(false);
+  const count = useCounter(value, 1600, started);
+
+  useEffect(() => {
+    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) setStarted(true); }, { threshold: 0.3 });
+    if (ref.current) obs.observe(ref.current);
+    return () => obs.disconnect();
+  }, []);
+
+  return (
+    <div ref={ref} className="text-center">
+      <p className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-primary tabular-nums">
+        {count.toLocaleString()}{suffix}
+      </p>
+      <p className="text-xs sm:text-sm text-gray-400 mt-1 font-medium">{label}</p>
+    </div>
+  );
+}
+
+const SUGGESTIONS = ['Milwaukee M18', 'DeWalt circular saw', 'Makita drill', 'Hilti hammer', 'Festool track saw', 'Bosch angle grinder', 'Paslode nailer', 'scaffolding'];
+
+export default function HomePage() {
+  const { navigate, openAuth, currentUser, listings } = useApp();
+  const [query, setQuery] = useState('');
+  const [searchState, setSearchState] = useState('');
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [heroLoaded, setHeroLoaded] = useState(false);
+
+  useEffect(() => { setTimeout(() => setHeroLoaded(true), 50); }, []);
+
+  const featuredListings = listings.filter((l) => l.featured || l.status === 'active').slice(0, 6);
+  const filtered = SUGGESTIONS.filter((s) => query && s.toLowerCase().includes(query.toLowerCase()));
+
+  const whyItems = [
+    { icon: Shield, title: 'Trusted Community', desc: 'Verified tradie profiles and ratings from 12,000+ real trade professionals.' },
+    { icon: CheckCircle, title: 'Verified Sellers', desc: 'Every seller is reviewed. Honest listings, verified condition grading.' },
+    { icon: MapPin, title: 'Australia Wide', desc: 'Buyers and sellers across every state. Local pickup or nationwide freight.' },
+    { icon: MessageCircle, title: 'Safe Messaging', desc: 'Negotiate in-app without sharing your personal number until you\'re ready.' },
+    { icon: Zap, title: 'Free Listings', desc: 'List your tools for free. No subscription. No hidden fees.' },
+    { icon: TrendingUp, title: 'Best Prices', desc: 'Market-informed pricing data to help you buy smart and sell faster.' },
+  ];
+
+  return (
+    <div className="min-h-screen overflow-x-hidden">
+
+      {/* ─── HERO ─── */}
+      <section className="relative min-h-[92vh] flex items-center bg-[#0A0A0A] text-white overflow-hidden">
+        {/* Background image */}
+        <div
+          className="absolute inset-0 bg-cover bg-center transition-opacity duration-700"
+          style={{
+            backgroundImage: 'url(https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=1800&h=1000&fit=crop&auto=format)',
+            opacity: heroLoaded ? 0.22 : 0,
+          }}
+        />
+        {/* Gradient overlays */}
+        <div className="absolute inset-0 bg-gradient-to-b from-[#0A0A0A]/80 via-[#0A0A0A]/50 to-[#0A0A0A]" />
+        <div className="absolute inset-0 bg-gradient-to-r from-[#0A0A0A]/60 via-transparent to-transparent" />
+
+        <div className="relative w-full max-w-7xl mx-auto px-4 sm:px-6 py-24 md:py-32 flex flex-col items-center text-center">
+
+          {/* Badge */}
+          <div
+            className="inline-flex items-center gap-2 bg-primary/15 border border-primary/25 rounded-full px-5 py-2 text-sm text-primary font-semibold mb-8 backdrop-blur-sm"
+            style={{ animation: 'fadeDown 0.6s ease both' }}
+          >
+            <span className="w-2 h-2 bg-primary rounded-full animate-pulse" />
+            Australia's #1 Trade Tool Marketplace
+          </div>
+
+          {/* Heading */}
+          <h1
+            className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-extrabold tracking-tight leading-[1.0] max-w-5xl mb-6"
+            style={{ animation: 'fadeUp 0.7s 0.1s ease both' }}
+          >
+            Australia's Marketplace<br />
+            <span className="text-primary">for Tradies</span>
+          </h1>
+
+          {/* Subheading */}
+          <p
+            className="text-lg sm:text-xl md:text-2xl text-gray-300 max-w-2xl mb-12 leading-relaxed font-light"
+            style={{ animation: 'fadeUp 0.7s 0.2s ease both' }}
+          >
+            Buy, sell and trade quality professional tools and construction equipment across Australia.
+          </p>
+
+          {/* ── SEARCH BAR ── */}
+          <div
+            className="w-full max-w-3xl mb-8"
+            style={{ animation: 'fadeUp 0.7s 0.3s ease both' }}
+          >
+            <div className="relative flex flex-col sm:flex-row bg-white rounded-2xl shadow-2xl shadow-black/40 overflow-hidden border border-white/10">
+              {/* Query input */}
+              <div className="flex-1 flex items-center gap-3 px-5 py-4 relative">
+                <Search className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                <input
+                  type="text"
+                  placeholder="What tools are you looking for?"
+                  value={query}
+                  onChange={(e) => { setQuery(e.target.value); setShowSuggestions(true); }}
+                  onFocus={() => setShowSuggestions(true)}
+                  onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+                  onKeyDown={(e) => e.key === 'Enter' && navigate('browse')}
+                  className="flex-1 text-foreground bg-transparent border-none outline-none placeholder:text-gray-400 text-base font-medium"
+                />
+                {/* Inline suggestions */}
+                {showSuggestions && filtered.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 bg-white border border-border rounded-xl shadow-xl mt-2 py-2 z-50">
+                    {filtered.map((s) => (
+                      <button
+                        key={s}
+                        onMouseDown={() => { setQuery(s); setShowSuggestions(false); navigate('browse'); }}
+                        className="w-full text-left px-5 py-2.5 text-sm text-foreground hover:bg-accent hover:text-primary transition-colors"
+                      >
+                        <Search className="w-3.5 h-3.5 inline mr-2 text-muted-foreground" />
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Divider */}
+              <div className="hidden sm:block w-px bg-gray-200 my-3" />
+
+              {/* State selector */}
+              <div className="flex items-center gap-1 px-4 py-4 border-t sm:border-t-0 border-gray-100">
+                <MapPin className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                <select
+                  value={searchState}
+                  onChange={(e) => setSearchState(e.target.value)}
+                  className="bg-transparent text-sm font-medium text-foreground focus:outline-none cursor-pointer pr-1 appearance-none"
+                >
+                  <option value="">All States</option>
+                  {['NSW', 'VIC', 'QLD', 'WA', 'SA', 'TAS', 'NT', 'ACT'].map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
+              </div>
+
+              {/* Search button */}
+              <button
+                onClick={() => navigate('browse')}
+                className="flex items-center justify-center gap-2 m-2 px-7 py-3.5 bg-primary text-white font-bold rounded-xl hover:bg-orange-600 active:scale-[0.98] transition-all text-sm shadow-lg shadow-primary/30"
+              >
+                <Search className="w-4 h-4" />
+                Search
+              </button>
+            </div>
+
+            {/* Quick filter chips */}
+            <div className="flex flex-wrap gap-2 justify-center mt-4">
+              {['Power Tools', 'Hand Tools', 'Welding', 'Safety Gear', 'Heavy Equipment'].map((tag) => {
+                const ids: Record<string, string> = { 'Power Tools': 'power-tools', 'Hand Tools': 'hand-tools', 'Welding': 'welding', 'Safety Gear': 'safety-gear', 'Heavy Equipment': 'heavy-equipment' };
+                return (
+                  <button
+                    key={tag}
+                    onClick={() => navigate('browse', { categoryId: ids[tag] })}
+                    className="px-4 py-1.5 bg-white/10 hover:bg-primary/80 border border-white/15 hover:border-primary rounded-full text-xs text-white/80 hover:text-white font-medium transition-all backdrop-blur-sm"
+                  >
+                    {tag}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* CTA buttons */}
+          <div
+            className="flex flex-col sm:flex-row gap-3 mb-16"
+            style={{ animation: 'fadeUp 0.7s 0.4s ease both' }}
+          >
+            <button
+              onClick={() => navigate('browse')}
+              className="flex items-center justify-center gap-2 px-8 py-4 bg-white text-[#111111] font-bold rounded-2xl hover:bg-gray-50 active:scale-[0.98] transition-all text-sm shadow-xl"
+            >
+              Browse Listings <ArrowRight className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => currentUser ? navigate('create') : openAuth('register')}
+              className="flex items-center justify-center gap-2 px-8 py-4 bg-primary text-white font-bold rounded-2xl hover:bg-orange-600 active:scale-[0.98] transition-all text-sm shadow-xl shadow-primary/30 border border-primary/40"
+            >
+              Sell Your Tools <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Scroll hint */}
+          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 opacity-40">
+            <ChevronDown className="w-5 h-5 animate-bounce" />
+          </div>
+        </div>
+      </section>
+
+      {/* ─── STATS BAR ─── */}
+      <section className="bg-[#111111] border-b border-white/5">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+            <StatCounter value={18543} label="Active Listings" />
+            <StatCounter value={9214} label="Verified Tradies" />
+            <StatCounter value={3821} label="Sales This Month" />
+            <StatCounter value={48} label="Australian Cities" suffix="+" />
+          </div>
+        </div>
+      </section>
+
+      {/* ─── FEATURED LISTINGS ─── */}
+      <section className="py-20 md:py-24 bg-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="flex items-end justify-between mb-10">
+            <div>
+              <p className="text-xs font-bold text-primary uppercase tracking-widest mb-2">Hand-Picked</p>
+              <h2 className="text-3xl sm:text-4xl font-extrabold text-foreground leading-tight">Featured Listings</h2>
+              <p className="text-muted-foreground mt-2">Quality tools from verified sellers across Australia</p>
+            </div>
+            <button
+              onClick={() => navigate('browse')}
+              className="hidden sm:flex items-center gap-1.5 text-primary font-semibold text-sm hover:underline"
+            >
+              View all <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {featuredListings.map((listing) => (
+              <ListingCard key={listing.id} listing={listing} />
+            ))}
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center justify-between mt-10 gap-4">
+            <button onClick={() => navigate('browse')} className="sm:hidden flex items-center gap-1.5 text-primary font-semibold text-sm hover:underline">
+              View all listings <ChevronRight className="w-4 h-4" />
+            </button>
+            <div className="hidden sm:block" />
+            <button
+              onClick={() => navigate('browse')}
+              className="inline-flex items-center gap-2 px-8 py-3.5 border-2 border-[#111111] text-[#111111] font-bold rounded-2xl hover:bg-[#111111] hover:text-white transition-all text-sm"
+            >
+              Browse All {18543..toLocaleString()} Listings <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* ─── CATEGORIES ─── */}
+      <section className="py-20 md:py-24 bg-[#F7F7F7]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-12">
+            <p className="text-xs font-bold text-primary uppercase tracking-widest mb-2">Every Trade</p>
+            <h2 className="text-3xl sm:text-4xl font-extrabold text-foreground">Browse by Category</h2>
+            <p className="text-muted-foreground mt-2">Find exactly what you need across all trade categories</p>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+            {CATEGORIES.map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => navigate('browse', { categoryId: cat.id })}
+                className="group relative rounded-2xl overflow-hidden aspect-[4/3] bg-[#111111] cursor-pointer border-2 border-transparent hover:border-primary transition-all duration-300"
+              >
+                <img
+                  src={cat.image}
+                  alt={cat.name}
+                  className="absolute inset-0 w-full h-full object-cover opacity-55 group-hover:opacity-40 group-hover:scale-110 transition-all duration-500"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
+                <div className="absolute inset-0 flex flex-col justify-end p-4 text-left">
+                  <h3 className="text-white font-bold text-sm sm:text-base leading-tight">{cat.name}</h3>
+                  <p className="text-gray-300 text-xs mt-0.5">{cat.count.toLocaleString()} listings</p>
+                </div>
+                <div className="absolute inset-0 border-2 border-primary rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                <div className="absolute top-3 right-3 w-7 h-7 bg-primary rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 shadow-lg">
+                  <ArrowRight className="w-3.5 h-3.5 text-white" />
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ─── WHY TOOLLINK ─── */}
+      <section className="py-20 md:py-24 bg-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-14">
+            <p className="text-xs font-bold text-primary uppercase tracking-widest mb-2">Built for Tradies</p>
+            <h2 className="text-3xl sm:text-4xl font-extrabold text-foreground mb-3">Why ToolLink?</h2>
+            <p className="text-muted-foreground max-w-xl mx-auto text-base">
+              Every feature is designed around how Australian trade professionals actually work.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {whyItems.map(({ icon: Icon, title, desc }) => (
+              <div
+                key={title}
+                className="group p-7 rounded-2xl border border-border hover:border-primary/20 hover:shadow-xl hover:shadow-primary/5 hover:-translate-y-1 transition-all duration-300 cursor-default"
+              >
+                <div className="w-12 h-12 bg-[#FFF0E6] rounded-2xl flex items-center justify-center mb-5 group-hover:bg-primary transition-colors duration-300">
+                  <Icon className="w-6 h-6 text-primary group-hover:text-white transition-colors duration-300" />
+                </div>
+                <h3 className="font-bold text-foreground text-base mb-2">{title}</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">{desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ─── HOW IT WORKS ─── */}
+      <section className="py-20 md:py-24 bg-[#111111] text-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-14">
+            <p className="text-xs font-bold text-primary uppercase tracking-widest mb-2">Simple Process</p>
+            <h2 className="text-3xl sm:text-4xl font-extrabold mb-3">How It Works</h2>
+            <p className="text-gray-400">From listing to sold in four simple steps</p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+            {[
+              { step: '01', title: 'Create Your Account', desc: 'Sign up free in under a minute. Add your trade and location to build trust.' },
+              { step: '02', title: 'List Your Tools', desc: 'Upload photos. Our AI suggests your price, brand, and description instantly.' },
+              { step: '03', title: 'Connect & Negotiate', desc: 'Tradies message you directly. Discuss condition and agree on a fair price.' },
+              { step: '04', title: 'Complete the Sale', desc: 'Exchange goods and payment. Leave a review and build your reputation.' },
+            ].map(({ step, title, desc }, i) => (
+              <div key={step} className="relative">
+                {i < 3 && <div className="hidden lg:block absolute top-7 left-[calc(100%-1rem)] w-8 h-px bg-white/10 z-0" />}
+                <div className="w-14 h-14 bg-primary rounded-2xl flex items-center justify-center text-xl font-extrabold mb-5 shadow-lg shadow-primary/30">
+                  {step}
+                </div>
+                <h3 className="font-bold text-lg mb-2">{title}</h3>
+                <p className="text-sm text-gray-400 leading-relaxed">{desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ─── TESTIMONIAL / CTA ─── */}
+      <section className="py-20 md:py-24 bg-[#FFF0E6]">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 text-center">
+          <div className="flex items-center justify-center gap-0.5 mb-6">
+            {[...Array(5)].map((_, i) => <Star key={i} className="w-5 h-5 fill-primary text-primary" />)}
+          </div>
+          <blockquote className="text-2xl sm:text-3xl font-bold text-foreground mb-8 leading-snug">
+            &ldquo;Sold my old Milwaukee kit in 48 hours and used the cash to buy a new Hilti setup. Best thing I&apos;ve done for my business this year.&rdquo;
+          </blockquote>
+          <div className="flex items-center justify-center gap-3 mb-12">
+            <img
+              src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=80&h=80&fit=crop&auto=format"
+              alt="Jake Morrison"
+              className="w-12 h-12 rounded-full object-cover border-2 border-primary shadow-md"
+            />
+            <div className="text-left">
+              <p className="font-bold text-foreground text-sm">Jake Morrison</p>
+              <p className="text-xs text-muted-foreground">Licensed Electrician · Parramatta, NSW ⭐ 4.9</p>
+            </div>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <button
+              onClick={() => currentUser ? navigate('create') : openAuth('register')}
+              className="px-10 py-4 bg-primary text-white font-extrabold rounded-2xl hover:bg-orange-600 active:scale-[0.98] transition-all text-sm shadow-xl shadow-primary/25"
+            >
+              Start Selling Today — It&apos;s Free
+            </button>
+            <button
+              onClick={() => navigate('browse')}
+              className="px-10 py-4 bg-white text-foreground font-bold rounded-2xl hover:bg-gray-50 transition-all text-sm border border-border shadow-md"
+            >
+              Browse Listings
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <style>{`
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeDown { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: translateY(0); } }
+      `}</style>
+    </div>
+  );
+}

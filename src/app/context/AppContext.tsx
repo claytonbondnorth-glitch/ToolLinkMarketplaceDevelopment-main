@@ -1,0 +1,677 @@
+import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
+import { toast } from 'sonner';
+import { supabase, EDGE_URL } from '../../lib/supabase';
+import { LISTINGS as MOCK_LISTINGS, CATEGORIES } from '../data/mockData';
+
+// ── Types ──────────────────────────────────────────────────────────────────────
+
+export type Page = 'home' | 'browse' | 'listing' | 'create' | 'profile' | 'seller' | 'messages' | 'admin' | 'auth';
+export type AuthMode = 'login' | 'register' | 'forgot';
+
+export interface AppUser {
+  id: string;
+  name: string;
+  email: string;
+  avatar: string;
+  location: string;
+  state: string;
+  bio: string;
+  phone: string;
+  verified: boolean;
+  isAdmin: boolean;
+  rating: number;
+  reviewCount: number;
+  totalListings: number;
+  memberSince: string;
+  savedListings: string[];
+  activeSales: number;
+}
+
+export interface AppListing {
+  id: string;
+  title: string;
+  price: number;
+  condition: string;
+  brand: string;
+  category: string;
+  categoryId: string;
+  location: string;
+  state: string;
+  description: string;
+  images: string[];
+  sellerId: string;
+  soldToUserId?: string | null;
+  dateListed: string;
+  views: number;
+  featured: boolean;
+  status: string;
+  reportCount: number;
+}
+
+export interface AppMessage {
+  id: string;
+  senderId: string;
+  text: string;
+  timestamp: string;
+  read: boolean;
+}
+
+export interface AppConversation {
+  id: string;
+  participantIds: [string, string];
+  listingId: string;
+  messages: AppMessage[];
+}
+
+interface NavParams {
+  listingId?: string;
+  userId?: string;
+  conversationId?: string;
+  categoryId?: string;
+}
+
+interface AppContextValue {
+  currentPage: Page;
+  navParams: NavParams;
+  navigate: (page: Page, params?: NavParams) => void;
+
+  currentUser: AppUser | null;
+  authLoading: boolean;
+  login: (email: string, password: string) => Promise<string | null>;
+  register: (name: string, email: string, password: string) => Promise<string | null>;
+  logout: () => Promise<void>;
+  updateProfile: (updates: Partial<AppUser>) => Promise<void>;
+
+  showAuth: boolean;        // true when currentPage === 'auth'
+  authMode: AuthMode;
+  openAuth: (mode?: AuthMode) => void;  // navigates to auth page
+  closeAuth: () => void;                // navigates back to home
+
+  listings: AppListing[];
+  listingsLoading: boolean;
+  savedIds: Set<string>;
+  toggleSave: (listingId: string) => Promise<void>;
+  addListing: (listing: Omit<AppListing, 'id' | 'dateListed' | 'views' | 'reportCount' | 'status'>) => Promise<string | null>;
+  deleteListing: (listingId: string) => Promise<void>;
+
+  conversations: AppConversation[];
+  sendMessage: (conversationId: string, text: string) => Promise<void>;
+  startConversation: (listingId: string, sellerId: string, firstMessage: string) => Promise<string>;
+  markConversationAsRead: (conversationId: string) => Promise<void>;
+  unreadCount: number;
+
+  users: AppUser[];
+  refreshUserProfiles: (userIds?: string[]) => Promise<void>;
+  updateListingStatus: (listingId: string, status: string, soldToUserId?: string | null) => Promise<void>;
+  deleteListingAdmin: (listingId: string) => Promise<void>;
+  deleteUserAdmin: (userId: string) => Promise<void>;
+
+  schemaReady: boolean;
+  schemaError: string | null;
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+function rowToUser(row: any): AppUser {
+  return {
+    id: row.id,
+    name: row.name ?? '',
+    email: row.email ?? '',
+    avatar: row.avatar_url ?? '',
+    location: row.location ?? 'Australia',
+    state: row.state ?? 'NSW',
+    bio: row.bio ?? '',
+    phone: row.phone ?? '',
+    verified: row.verified ?? false,
+    isAdmin: row.is_admin ?? false,
+    rating: row.rating ?? 0,
+    reviewCount: row.review_count ?? 0,
+    totalListings: row.total_listings ?? 0,
+    memberSince: row.created_at ?? new Date().toISOString(),
+    savedListings: [],
+    activeSales: 0,
+  };
+}
+
+function rowToListing(row: any): AppListing {
+  return {
+    id: row.id,
+    title: row.title ?? '',
+    price: Number(row.price) ?? 0,
+    condition: row.condition ?? 'Used - Good',
+    brand: row.brand ?? 'Other',
+    category: row.category ?? '',
+    categoryId: row.category_id ?? '',
+    location: row.location ?? '',
+    state: row.state ?? '',
+    description: row.description ?? '',
+    images: row.images ?? [],
+    sellerId: row.seller_id ?? '',
+    soldToUserId: row.sold_to_user_id ?? null,
+    dateListed: row.created_at ?? new Date().toISOString(),
+    views: row.views ?? 0,
+    featured: row.featured ?? false,
+    status: row.status ?? 'active',
+    reportCount: row.report_count ?? 0,
+  };
+}
+
+// ── Context ────────────────────────────────────────────────────────────────────
+
+const AppContext = createContext<AppContextValue | null>(null);
+
+export function AppProvider({ children }: { children: ReactNode }) {
+  const [currentPage, setCurrentPage] = useState<Page>('home');
+  const [navParams, setNavParams] = useState<NavParams>({});
+
+  const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  // showAuth is derived — true whenever the user is on the auth page
+  const [authMode, setAuthMode] = useState<AuthMode>('login');
+
+  const [listings, setListings] = useState<AppListing[]>([]);
+  const [listingsLoading, setListingsLoading] = useState(true);
+  const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
+
+  const [conversations, setConversations] = useState<AppConversation[]>([]);
+  const [users, setUsers] = useState<AppUser[]>([]);
+
+  const [schemaReady, setSchemaReady] = useState(false);
+  const [schemaError, setSchemaError] = useState<string | null>(null);
+
+  // ── Schema setup ─────────────────────────────────────────────────────────────
+  useEffect(() => {
+    async function ensureSchema() {
+      try {
+        // Check if schema is ready via edge function
+        const res = await fetch(`${EDGE_URL}/schema-status`).catch(() => null);
+        if (res?.ok) {
+          const data = await res.json();
+          if (data.ready) {
+            setSchemaReady(true);
+            return;
+          }
+        }
+
+        // Attempt automatic setup
+        const setupRes = await fetch(`${EDGE_URL}/setup-schema`, { method: 'POST' }).catch(() => null);
+        if (setupRes?.ok) {
+          const setupData = await setupRes.json();
+          if (setupData.ok) {
+            setSchemaReady(true);
+            return;
+          }
+          // Setup ran but returned SQL fallback — tables might still be fine
+          // Try querying listings directly
+        }
+
+        // Direct check — if listings table is accessible, we're good
+        const { error } = await supabase.from('listings').select('id').limit(1);
+        if (!error || !error.message.includes('does not exist')) {
+          setSchemaReady(true);
+        } else {
+          setSchemaError('Run supabase/migrations/001_schema.sql in the Supabase SQL Editor, then refresh.');
+        }
+      } catch {
+        // Schema might still be fine — try anyway
+        setSchemaReady(true);
+      }
+    }
+    ensureSchema();
+  }, []);
+
+  // ── Auth state ────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    // Restore existing session on page load via getSession (most reliable)
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        await loadProfile(session.user.id);
+      } else {
+        setAuthLoading(false);
+      }
+    });
+
+    // Listen only for sign-out and token refresh; sign-in is handled directly in login()
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT') {
+        setCurrentUser(null);
+        setSavedIds(new Set());
+        setAuthLoading(false);
+        setCurrentPage('home');
+      }
+      // TOKEN_REFRESHED keeps the session alive silently — no UI action needed
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  async function loadProfile(userId: string): Promise<AppUser | null> {
+    let { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
+
+    // Profile row may not exist yet — create it from auth metadata
+    if (!data || error) {
+      const { data: authData } = await supabase.auth.getUser();
+      const authUser = authData?.user;
+      if (authUser) {
+        const fallbackName =
+          authUser.user_metadata?.name ||
+          authUser.email?.split('@')[0] ||
+          'Tradie';
+        const { data: created } = await supabase
+          .from('profiles')
+          .upsert({ id: userId, name: fallbackName, email: authUser.email }, { onConflict: 'id' })
+          .select()
+          .single();
+        data = created;
+      }
+    }
+
+    setAuthLoading(false);
+
+    if (!data) return null;
+
+    const user = rowToUser(data);
+    const { data: saved } = await supabase
+      .from('saved_listings')
+      .select('listing_id')
+      .eq('user_id', userId);
+    user.savedListings = saved?.map((s: any) => s.listing_id) ?? [];
+    setSavedIds(new Set(user.savedListings));
+    setCurrentUser(user);
+    return user;
+  }
+
+  // ── Fetch listings ────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!schemaReady) return;
+    fetchListings();
+  }, [schemaReady]);
+
+  const refreshUserProfiles = useCallback(async (userIds?: string[]) => {
+    try {
+      let query = supabase.from('profiles').select('*');
+      if (userIds?.length) {
+        query = query.in('id', userIds);
+      }
+
+      const { data, error } = await query.order('created_at', { ascending: false });
+      if (error || !data) return;
+
+      const refreshedUsers = data.map(rowToUser);
+      setUsers((prev) => {
+        const merged = new Map(prev.map((user) => [user.id, user]));
+        refreshedUsers.forEach((user) => merged.set(user.id, user));
+        return Array.from(merged.values());
+      });
+
+      if (currentUser?.id && (!userIds || userIds.includes(currentUser.id))) {
+        const refreshedCurrentUser = refreshedUsers.find((user) => user.id === currentUser.id);
+        if (refreshedCurrentUser) {
+          setCurrentUser((prev) => (prev ? { ...prev, ...refreshedCurrentUser } : refreshedCurrentUser));
+        }
+      }
+    } catch {
+      // Ignore refresh failures; the seller profile can still render with the last known values.
+    }
+  }, [currentUser?.id]);
+
+  async function fetchListings() {
+    setListingsLoading(true);
+    const { data, error } = await supabase
+      .from('listings')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (data && !error) {
+      setListings(data.map(rowToListing));
+    } else {
+      // Fall back to mock data if schema isn't ready
+      setListings(MOCK_LISTINGS.map(l => ({ ...l, sellerId: l.sellerId })));
+    }
+    setListingsLoading(false);
+  }
+
+  // ── Fetch users (for admin / seller profiles) ─────────────────────────────────
+  useEffect(() => {
+    if (!schemaReady) return;
+    refreshUserProfiles();
+  }, [schemaReady, refreshUserProfiles]);
+
+  // ── Fetch conversations ───────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!currentUser || !schemaReady) return;
+    fetchConversations();
+  }, [currentUser?.id, schemaReady]);
+
+  async function fetchConversations() {
+    if (!currentUser) return;
+    const { data } = await supabase
+      .from('conversations')
+      .select('*, messages(*)')
+      .or(`buyer_id.eq.${currentUser.id},seller_id.eq.${currentUser.id}`)
+      .order('created_at', { ascending: false });
+
+    if (data) {
+      const convs: AppConversation[] = data.map((c: any) => ({
+        id: c.id,
+        participantIds: [c.buyer_id, c.seller_id],
+        listingId: c.listing_id,
+        messages: (c.messages ?? [])
+          .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+          .map((m: any): AppMessage => ({
+            id: m.id,
+            senderId: m.sender_id,
+            text: m.text,
+            timestamp: m.created_at,
+            read: m.read,
+          })),
+      }));
+      setConversations(convs);
+    }
+  }
+
+  // ── Navigation ────────────────────────────────────────────────────────────────
+  const navigate = useCallback((page: Page, params?: NavParams) => {
+    setCurrentPage(page);
+    setNavParams(params ?? {});
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  // ── Auth ──────────────────────────────────────────────────────────────────────
+  const login = useCallback(async (email: string, password: string): Promise<string | null> => {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+    if (error) {
+      if (error.message.toLowerCase().includes('email not confirmed')) {
+        return 'Please confirm your email before logging in. Check your inbox for the confirmation link.';
+      }
+      return error.message;
+    }
+
+    // Success — load profile, close auth page, go home
+    const user = data.user ? await loadProfile(data.user.id) : null;
+    setCurrentPage('home');
+    setNavParams({});
+
+    if (user) {
+      const firstName = user.name.split(' ')[0];
+      toast.success(`Welcome back, ${firstName}!`, {
+        description: 'You are now signed in to ToolLink.',
+        duration: 4000,
+      });
+    }
+
+    return null;
+  }, []);
+
+  const register = useCallback(async (name: string, email: string, password: string): Promise<string | null> => {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { name } },
+    });
+
+    if (error) return error.message;
+
+    // If email confirmation is disabled, Supabase immediately signs the user in
+    if (data.session && data.user) {
+      const user = await loadProfile(data.user.id);
+      setCurrentPage('home');
+      setNavParams({});
+      if (user) {
+        const firstName = user.name.split(' ')[0];
+        toast.success(`Welcome to ToolLink, ${firstName}!`, {
+          description: 'Your account has been created. Happy trading!',
+          duration: 5000,
+        });
+      }
+    }
+    // If email confirmation is required, data.session will be null —
+    // AuthPage detects this via the null error and shows the "check inbox" screen.
+
+    return null;
+  }, []);
+
+  const logout = useCallback(async () => {
+    await supabase.auth.signOut();
+    setCurrentUser(null);
+    setSavedIds(new Set());
+    setCurrentPage('home');
+  }, []);
+
+  const updateProfile = useCallback(async (updates: Partial<AppUser>) => {
+    if (!currentUser) return;
+    const dbUpdates: any = {};
+    if (updates.name !== undefined) dbUpdates.name = updates.name;
+    if (updates.avatar !== undefined) dbUpdates.avatar_url = updates.avatar;
+    if (updates.location !== undefined) dbUpdates.location = updates.location;
+    if (updates.state !== undefined) dbUpdates.state = updates.state;
+    if (updates.bio !== undefined) dbUpdates.bio = updates.bio;
+    if (updates.phone !== undefined) dbUpdates.phone = updates.phone;
+
+    const { error } = await supabase.from('profiles').update(dbUpdates).eq('id', currentUser.id);
+    if (error) throw error;
+
+    await refreshUserProfiles([currentUser.id]);
+  }, [currentUser, refreshUserProfiles]);
+
+  // Navigate to the auth page — same mechanism as all other navigation
+  const openAuth = useCallback((mode: AuthMode = 'login') => {
+    setAuthMode(mode);
+    setCurrentPage('auth');
+    setNavParams({});
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  // Go back home from the auth page
+  const closeAuth = useCallback(() => {
+    setCurrentPage('home');
+    setNavParams({});
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  // ── Listings ──────────────────────────────────────────────────────────────────
+  const toggleSave = useCallback(async (listingId: string) => {
+    if (!currentUser) { openAuth('login'); return; }
+    const isSaved = savedIds.has(listingId);
+
+    // Optimistic update
+    setSavedIds(prev => {
+      const next = new Set(prev);
+      if (isSaved) next.delete(listingId); else next.add(listingId);
+      return next;
+    });
+
+    if (isSaved) {
+      await supabase.from('saved_listings')
+        .delete()
+        .eq('user_id', currentUser.id)
+        .eq('listing_id', listingId);
+    } else {
+      await supabase.from('saved_listings')
+        .insert({ user_id: currentUser.id, listing_id: listingId });
+    }
+  }, [currentUser, savedIds, openAuth]);
+
+  const addListing = useCallback(async (
+    listing: Omit<AppListing, 'id' | 'dateListed' | 'views' | 'reportCount' | 'status'>
+  ): Promise<string | null> => {
+    if (!currentUser) return null;
+
+    const { data, error } = await supabase
+      .from('listings')
+      .insert({
+        title: listing.title,
+        description: listing.description,
+        price: listing.price,
+        condition: listing.condition,
+        brand: listing.brand,
+        category: listing.category,
+        category_id: listing.categoryId,
+        location: listing.location,
+        state: listing.state,
+        images: listing.images,
+        seller_id: currentUser.id,
+        featured: listing.featured,
+        status: 'active',
+      })
+      .select()
+      .single();
+
+    if (data && !error) {
+      const newListing = rowToListing(data);
+      setListings(prev => [newListing, ...prev]);
+      // Update total_listings count
+      await supabase.from('profiles')
+        .update({ total_listings: (currentUser.totalListings ?? 0) + 1 })
+        .eq('id', currentUser.id);
+      setCurrentUser(prev => prev ? { ...prev, totalListings: (prev.totalListings ?? 0) + 1 } : prev);
+      return data.id;
+    }
+    return null;
+  }, [currentUser]);
+
+  const deleteListing = useCallback(async (listingId: string) => {
+    if (!currentUser) return;
+    await supabase.from('listings').delete().eq('id', listingId).eq('seller_id', currentUser.id);
+    setListings(prev => prev.filter(l => l.id !== listingId));
+  }, [currentUser]);
+
+  // ── Messages ──────────────────────────────────────────────────────────────────
+  const sendMessage = useCallback(async (conversationId: string, text: string) => {
+    if (!currentUser) return;
+    const { data } = await supabase
+      .from('messages')
+      .insert({ conversation_id: conversationId, sender_id: currentUser.id, text })
+      .select()
+      .single();
+
+    if (data) {
+      const msg: AppMessage = {
+        id: data.id,
+        senderId: data.sender_id,
+        text: data.text,
+        timestamp: data.created_at,
+        read: false,
+      };
+      setConversations(prev => prev.map(c =>
+        c.id === conversationId ? { ...c, messages: [...c.messages, msg] } : c
+      ));
+    }
+  }, [currentUser]);
+
+  const startConversation = useCallback(async (
+    listingId: string,
+    sellerId: string,
+    firstMessage: string
+  ): Promise<string> => {
+    if (!currentUser) return '';
+
+    // Check for existing conversation
+    const existing = conversations.find(c =>
+      c.listingId === listingId &&
+      c.participantIds.includes(currentUser.id) &&
+      c.participantIds.includes(sellerId)
+    );
+    if (existing) {
+      await sendMessage(existing.id, firstMessage);
+      return existing.id;
+    }
+
+    // Create new conversation
+    const { data: conv } = await supabase
+      .from('conversations')
+      .insert({ listing_id: listingId, buyer_id: currentUser.id, seller_id: sellerId })
+      .select()
+      .single();
+
+    if (!conv) return '';
+
+    const { data: msg } = await supabase
+      .from('messages')
+      .insert({ conversation_id: conv.id, sender_id: currentUser.id, text: firstMessage })
+      .select()
+      .single();
+
+    const newConv: AppConversation = {
+      id: conv.id,
+      participantIds: [conv.buyer_id, conv.seller_id],
+      listingId: conv.listing_id,
+      messages: msg ? [{
+        id: msg.id,
+        senderId: msg.sender_id,
+        text: msg.text,
+        timestamp: msg.created_at,
+        read: false,
+      }] : [],
+    };
+    setConversations(prev => [newConv, ...prev]);
+    return conv.id;
+  }, [currentUser, conversations, sendMessage]);
+
+  const markConversationAsRead = useCallback(async (conversationId: string) => {
+    if (!currentUser) return;
+
+    const conversation = conversations.find((c) => c.id === conversationId);
+    if (!conversation) return;
+
+    const unreadMessageIds = conversation.messages
+      .filter((message) => message.senderId !== currentUser.id && !message.read)
+      .map((message) => message.id);
+
+    if (unreadMessageIds.length === 0) return;
+
+    await supabase.from('messages').update({ read: true }).in('id', unreadMessageIds);
+
+    setConversations(prev => prev.map((c) => c.id === conversationId ? {
+      ...c,
+      messages: c.messages.map((message) => unreadMessageIds.includes(message.id) ? { ...message, read: true } : message),
+    } : c));
+  }, [currentUser, conversations]);
+
+  // ── Admin ─────────────────────────────────────────────────────────────────────
+  const updateListingStatus = useCallback(async (listingId: string, status: string, soldToUserId?: string | null) => {
+    await supabase.from('listings').update({ status, sold_to_user_id: soldToUserId ?? null }).eq('id', listingId);
+    setListings(prev => prev.map(l => l.id === listingId ? { ...l, status, soldToUserId: soldToUserId ?? null } : l));
+  }, []);
+
+  const deleteListingAdmin = useCallback(async (listingId: string) => {
+    await supabase.from('listings').delete().eq('id', listingId);
+    setListings(prev => prev.filter(l => l.id !== listingId));
+  }, []);
+
+  const deleteUserAdmin = useCallback(async (userId: string) => {
+    // Soft: just remove from local state; actual auth user delete needs service role
+    setUsers(prev => prev.filter(u => u.id !== userId));
+    setListings(prev => prev.filter(l => l.sellerId !== userId));
+  }, []);
+
+  const unreadCount = conversations.reduce((acc, c) => {
+    if (!currentUser) return acc;
+    return acc + c.messages.filter(m => m.senderId !== currentUser.id && !m.read).length;
+  }, 0);
+
+  // showAuth is derived — true when the user is on the auth page
+  const showAuth = currentPage === 'auth';
+
+  return (
+    <AppContext.Provider value={{
+      currentPage, navParams, navigate,
+      currentUser, authLoading, login, register, logout, updateProfile,
+      showAuth, authMode, openAuth, closeAuth,
+      listings, listingsLoading, savedIds, toggleSave, addListing, deleteListing,
+      conversations, sendMessage, startConversation, markConversationAsRead, unreadCount,
+      users, updateListingStatus, deleteListingAdmin, deleteUserAdmin,
+      schemaReady, schemaError,
+    }}>
+      {children}
+    </AppContext.Provider>
+  );
+}
+
+export function useApp() {
+  const ctx = useContext(AppContext);
+  if (!ctx) throw new Error('useApp must be used within AppProvider');
+  return ctx;
+}
