@@ -55,11 +55,19 @@ export default function HomePage() {
 
   useEffect(() => { setTimeout(() => setHeroLoaded(true), 50); }, []);
 
+  const activeListings = listings.filter((l) => l.status === 'active');
+  const activeListingCount = activeListings.length;
+  const categoryCounts = activeListings.reduce<Record<string, number>>((acc, listing) => {
+    if (!listing.categoryId) return acc;
+    acc[listing.categoryId] = (acc[listing.categoryId] ?? 0) + 1;
+    return acc;
+  }, {});
+
   const featuredListings = listings.filter((l) => l.featured || l.status === 'active').slice(0, 6);
   const filtered = SUGGESTIONS.filter((s) => query && s.toLowerCase().includes(query.toLowerCase()));
 
   const whyItems = [
-    { icon: Shield, title: 'Trusted Community', desc: 'Verified tradie profiles and ratings from 12,000+ real trade professionals.' },
+    { icon: Shield, title: 'Trusted Community', desc: 'Verified tradie profiles and ratings from real trade professionals.' },
     { icon: CheckCircle, title: 'Verified Sellers', desc: 'Every seller is reviewed. Honest listings, verified condition grading.' },
     { icon: MapPin, title: 'Australia Wide', desc: 'Buyers and sellers across every state. Local pickup or nationwide freight.' },
     { icon: MessageCircle, title: 'Safe Messaging', desc: 'Negotiate in-app without sharing your personal number until you\'re ready.' },
@@ -224,10 +232,10 @@ export default function HomePage() {
       <section className="bg-[#111111] border-b border-white/5">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-            <DynamicStatCounter initialValue={48} loadValue={getActiveListingsCount} label="Active Listings" />
+            <DynamicStatCounter initialValue={0} loadValue={getActiveListingsCount} label="Active Listings" />
             <DynamicStatCounter initialValue={0} loadValue={getVerifiedTradesCount} label="Verified Trades" />
             <DynamicStatCounter initialValue={0} loadValue={getSalesThisMonthCount} label="Sales This Month" />
-            <DynamicStatCounter initialValue={12} loadValue={getCitiesCoveredCount} label="Cities Covered" suffix="+" />
+            <DynamicStatCounter initialValue={0} loadValue={getCitiesCoveredCount} label="Cities Covered" suffix="+" />
           </div>
         </div>
       </section>
@@ -264,7 +272,7 @@ export default function HomePage() {
               onClick={() => navigate('browse')}
               className="inline-flex items-center gap-2 px-8 py-3.5 border-2 border-[#111111] text-[#111111] font-bold rounded-2xl hover:bg-[#111111] hover:text-white transition-all text-sm"
             >
-              Browse All {18543..toLocaleString()} Listings <ArrowRight className="w-4 h-4" />
+              Browse All {activeListingCount.toLocaleString()} Listings <ArrowRight className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -293,7 +301,7 @@ export default function HomePage() {
                 <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
                 <div className="absolute inset-0 flex flex-col justify-end p-4 text-left">
                   <h3 className="text-white font-bold text-sm sm:text-base leading-tight">{cat.name}</h3>
-                  <p className="text-gray-300 text-xs mt-0.5">{cat.count.toLocaleString()} listings</p>
+                  <p className="text-gray-300 text-xs mt-0.5">{(categoryCounts[cat.id] ?? 0).toLocaleString()} listings</p>
                 </div>
                 <div className="absolute inset-0 border-2 border-primary rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 <div className="absolute top-3 right-3 w-7 h-7 bg-primary rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 shadow-lg">

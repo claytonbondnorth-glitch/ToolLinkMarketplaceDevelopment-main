@@ -82,6 +82,7 @@ export default function SellerProfilePage() {
   const parsedRating = Number.isFinite(sellerStats.averageRating) ? sellerStats.averageRating : 0;
   const parsedReviewCount = Number.isFinite(sellerStats.reviewCount) ? Math.max(0, sellerStats.reviewCount) : 0;
   const sellerListings = listings.filter((l) => l.sellerId === seller.id && l.status === 'active');
+  const sellerSoldListingsCount = listings.filter((l) => l.sellerId === seller.id && l.status === 'sold').length;
   const isOwnProfile = currentUser?.id === seller.id;
   const hasReviews = parsedReviewCount > 0;
   const formattedRating = parsedRating.toFixed(1);
@@ -153,7 +154,7 @@ export default function SellerProfilePage() {
               <div className="flex flex-wrap gap-4 mt-4 text-sm text-gray-400">
                 <span className="flex items-center gap-1.5"><MapPin className="w-4 h-4" />{seller.location}</span>
                 <span className="flex items-center gap-1.5"><Calendar className="w-4 h-4" />Member since {new Date(seller.memberSince).toLocaleDateString('en-AU', { month: 'long', year: 'numeric' })}</span>
-                <span className="flex items-center gap-1.5"><Package className="w-4 h-4" />{seller.totalListings} tools listed</span>
+                <span className="flex items-center gap-1.5"><Package className="w-4 h-4" />{sellerSoldListingsCount} sold listings</span>
               </div>
             </div>
           </div>
@@ -173,7 +174,7 @@ export default function SellerProfilePage() {
               <p className="text-xs text-gray-400">Active listings</p>
             </div>
             <div>
-              <p className="text-xl font-bold text-primary">{seller.totalListings}</p>
+              <p className="text-xl font-bold text-primary">{sellerSoldListingsCount}</p>
               <p className="text-xs text-gray-400">Total sold</p>
             </div>
           </div>

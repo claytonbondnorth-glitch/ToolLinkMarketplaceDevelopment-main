@@ -84,8 +84,49 @@ export default function MarketplacePage() {
   const set = (field: keyof Filters) => (value: string) =>
     setFilters((prev) => ({ ...prev, [field]: value }));
 
+  const activeListings = useMemo(() => listings.filter((listing) => listing.status === 'active'), [listings]);
+  const categoryCounts = useMemo(
+    () => activeListings.reduce<Record<string, number>>((acc, listing) => {
+      if (!listing.categoryId) return acc;
+      acc[listing.categoryId] = (acc[listing.categoryId] ?? 0) + 1;
+      return acc;
+    }, {}),
+    [activeListings]
+  );
+  const brandCounts = useMemo(
+    () => activeListings.reduce<Record<string, number>>((acc, listing) => {
+      const key = listing.brand?.trim();
+      if (!key) return acc;
+      acc[key] = (acc[key] ?? 0) + 1;
+      return acc;
+    }, {}),
+    [activeListings]
+  );
+  const stateCounts = useMemo(
+    () => activeListings.reduce<Record<string, number>>((acc, listing) => {
+      const key = listing.state?.trim();
+      if (!key) return acc;
+      acc[key] = (acc[key] ?? 0) + 1;
+      return acc;
+    }, {}),
+    [activeListings]
+  );
+  const activeAreaCount = useMemo(() => {
+    const areas = new Set(
+      activeListings
+        .map((listing) => {
+          const location = listing.location?.trim().toLowerCase() ?? '';
+          const state = listing.state?.trim().toLowerCase() ?? '';
+          if (!location && !state) return '';
+          return `${location}|${state}`;
+        })
+        .filter(Boolean)
+    );
+    return areas.size;
+  }, [activeListings]);
+
   const filtered = useMemo(() => {
-    let result = listings.filter((l) => l.status === 'active');
+    let result = activeListings;
     if (filters.query) {
       const q = filters.query.toLowerCase();
       result = result.filter(
@@ -104,7 +145,7 @@ export default function MarketplacePage() {
       case 'views': return [...result].sort((a, b) => b.views - a.views);
       default: return [...result].sort((a, b) => new Date(b.dateListed).getTime() - new Date(a.dateListed).getTime());
     }
-  }, [listings, filters]);
+  }, [activeListings, filters]);
 
   const activeCategory = CATEGORIES.find((c) => c.id === filters.categoryId);
   const clearFilters = () => setFilters({ query: '', categoryId: '', brand: '', condition: '', state: '', minPrice: '', maxPrice: '', sort: 'recent' });
@@ -120,7 +161,7 @@ export default function MarketplacePage() {
             {CATEGORIES.map((cat) => (
               <button key={cat.id} onClick={() => set('categoryId')(cat.id)} className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${filters.categoryId === cat.id ? 'bg-primary text-white font-medium' : 'text-foreground hover:bg-muted'}`}>
                 <span>{cat.name}</span>
-                <span className={`text-xs ${filters.categoryId === cat.id ? 'text-white/70' : 'text-muted-foreground'}`}>{cat.count.toLocaleString()}</span>
+                <span className={`text-xs ${filters.categoryId === cat.id ? 'text-white/70' : 'text-muted-foreground'}`}>{(categoryCounts[cat.id] ?? 0).toLocaleString()}</span>
               </button>
             ))}
           </div>
@@ -129,7 +170,7 @@ export default function MarketplacePage() {
           <h3 className="text-sm font-semibold text-foreground mb-3">Brand</h3>
           <select value={filters.brand} onChange={(e) => set('brand')(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary">
             <option value="">All Brands</option>
-            {BRANDS.map((b) => <option key={b} value={b}>{b}</option>)}
+            {BRANDS.map((b) => <option key={b} value={b}>{`${b} (${(brandCounts[b] ?? 0).toLocaleString()})`}</option>)}
           </select>
         </div>
         <div>
@@ -156,7 +197,7 @@ export default function MarketplacePage() {
           <h3 className="text-sm font-semibold text-foreground mb-3">State / Territory</h3>
           <div className="grid grid-cols-2 gap-1.5">
             {STATES.map((s) => (
-              <button key={s} onClick={() => set('state')(filters.state === s ? '' : s)} className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${filters.state === s ? 'bg-primary border-primary text-white' : 'border-border text-foreground hover:border-primary hover:text-primary'}`}>{s}</button>
+              <button key={s} onClick={() => set('state')(filters.state === s ? '' : s)} className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${filters.state === s ? 'bg-primary border-primary text-white' : 'border-border text-foreground hover:border-primary hover:text-primary'}`}>{`${s} (${(stateCounts[s] ?? 0).toLocaleString()})`}</button>
             ))}
           </div>
         </div>
@@ -176,7 +217,7 @@ export default function MarketplacePage() {
           <div className="flex flex-col sm:flex-row sm:items-center gap-4">
             <div className="flex-1">
               <h1 className="text-2xl font-bold text-foreground">{activeCategory ? activeCategory.name : 'All Listings'}</h1>
-              <p className="text-sm text-muted-foreground mt-0.5">{filtered.length} {filtered.length === 1 ? 'listing' : 'listings'} found{filters.state && ` · ${filters.state}`}</p>
+              <p className="text-sm text-muted-foreground mt-0.5">{filtered.length} {filtered.length === 1 ? 'listing' : 'listings'} found{filters.state && ` · ${filters.state}`} · {activeAreaCount} {activeAreaCount === 1 ? 'area' : 'areas'}</p>
             </div>
             <div className="flex items-center gap-2 flex-1 max-w-md bg-muted rounded-xl px-4 py-2.5">
               <Search className="w-4 h-4 text-muted-foreground flex-shrink-0" />

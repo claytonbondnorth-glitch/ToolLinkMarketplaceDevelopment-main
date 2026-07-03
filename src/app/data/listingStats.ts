@@ -3,15 +3,15 @@ import { supabase } from '../../lib/supabase';
 export type MarketplaceStatistic = 'activeListings' | 'verifiedTrades' | 'salesThisMonth' | 'citiesCovered' | 'completedTransactions';
 
 const DEFAULT_STAT_COUNTS: Record<MarketplaceStatistic, number> = {
-  activeListings: 48,
+  activeListings: 0,
   verifiedTrades: 0,
   salesThisMonth: 0,
-  citiesCovered: 12,
+  citiesCovered: 0,
   completedTransactions: 0,
 };
 
 const COMPLETED_SALE_STATUS = 'sold';
-const SALE_COMPLETED_AT_COLUMN = 'created_at';
+const SALE_COMPLETED_AT_COLUMN = 'sold_at';
 
 async function countSoldListingsWithBuyer(): Promise<number> {
   const { count, error } = await supabase
@@ -44,6 +44,7 @@ async function countCompletedSalesThisMonth(): Promise<number> {
     .from('listings')
     .select('id', { count: 'exact', head: true })
     .eq('status', COMPLETED_SALE_STATUS)
+    .not('sold_to_user_id', 'is', null)
     .gte(SALE_COMPLETED_AT_COLUMN, monthStartIso)
     .lt(SALE_COMPLETED_AT_COLUMN, nextMonthStartIso);
 
@@ -102,7 +103,6 @@ export async function getMarketplaceStatisticCount(statistic: MarketplaceStatist
       return await countCitiesCoveredFromListings();
     }
 
-    // Replace remaining defaults with Supabase aggregate/count queries per statistic.
     return DEFAULT_STAT_COUNTS[statistic];
   } catch {
     return DEFAULT_STAT_COUNTS[statistic];
