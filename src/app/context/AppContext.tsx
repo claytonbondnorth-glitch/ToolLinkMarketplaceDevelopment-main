@@ -184,6 +184,7 @@ function rowToListing(row: any): AppListing {
 const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
+  const EMAIL_VERIFICATION_REQUIRED_MESSAGE = 'Please verify your email before signing in. Check your inbox for the verification link.';
   const [currentPage, setCurrentPage] = useState<Page>('home');
   const [navParams, setNavParams] = useState<NavParams>({});
 
@@ -261,7 +262,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setCurrentUser(null);
         setSavedIds(new Set());
         setAuthLoading(false);
-        setCurrentPage('home');
       }
       // TOKEN_REFRESHED keeps the session alive silently — no UI action needed
     });
@@ -443,9 +443,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     if (error) {
       if (error.message.toLowerCase().includes('email not confirmed')) {
-        return 'Please confirm your email before logging in. Check your inbox for the confirmation link.';
+        return EMAIL_VERIFICATION_REQUIRED_MESSAGE;
       }
       return error.message;
+    }
+
+    if (!data.user?.email_confirmed_at) {
+      await supabase.auth.signOut();
+      return EMAIL_VERIFICATION_REQUIRED_MESSAGE;
     }
 
     // Success — load profile, close auth page, go home
@@ -473,21 +478,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     if (error) return error.message;
 
-    // If email confirmation is disabled, Supabase immediately signs the user in
-    if (data.session && data.user) {
-      const user = await loadProfile(data.user.id);
-      setCurrentPage('home');
-      setNavParams({});
-      if (user) {
-        const firstName = user.name.split(' ')[0];
-        toast.success(`Welcome to ToolLink, ${firstName}!`, {
-          description: 'Your account has been created. Happy trading!',
-          duration: 5000,
-        });
-      }
+    await supabase.auth.resend({
+      type: 'signup',
+      email,
+      options: {
+        redirectTo: window.location.origin,
+      },
+    }).catch(() => null);
+
+    if (data.session) {
+      await supabase.auth.signOut();
     }
-    // If email confirmation is required, data.session will be null —
-    // AuthPage detects this via the null error and shows the "check inbox" screen.
 
     return null;
   }, []);

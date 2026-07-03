@@ -23,6 +23,8 @@ export default function AuthPage() {
   const [loading, setLoading] = useState(false);
   const [forgotSent, setForgotSent] = useState(false);
   const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendMessage, setResendMessage] = useState('');
 
   const set = (field: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm(prev => ({ ...prev, [field]: e.target.value }));
@@ -30,6 +32,7 @@ export default function AuthPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setResendMessage('');
     setLoading(true);
 
     if (authMode === 'login') {
@@ -66,6 +69,32 @@ export default function AuthPage() {
     }
 
     setLoading(false);
+  };
+
+  const handleResendVerificationEmail = async () => {
+    const email = form.email.trim();
+    if (!email) {
+      setError('Enter your email address first to resend verification.');
+      return;
+    }
+
+    setError('');
+    setResendMessage('');
+    setResendLoading(true);
+
+    const { error: resendError } = await supabase.auth.resend({
+      type: 'signup',
+      email,
+      options: { redirectTo: window.location.origin },
+    });
+
+    if (resendError) {
+      setError(resendError.message);
+    } else {
+      setResendMessage('Verification email sent. Please check your inbox.');
+    }
+
+    setResendLoading(false);
   };
 
   const titles: Record<typeof authMode, string> = {
@@ -124,19 +153,40 @@ export default function AuthPage() {
                 <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
                   <Mail className="w-8 h-8 text-blue-600" />
                 </div>
-                <h2 className="font-bold text-foreground text-lg mb-2">Check your inbox</h2>
-                <p className="text-sm text-muted-foreground mb-1">We sent a confirmation link to</p>
-                <p className="text-sm font-semibold text-foreground mb-4">{form.email}</p>
-                <p className="text-xs text-muted-foreground mb-6">
-                  Click the link in the email to activate your account, then sign in.
-                  Check your spam folder if you don&apos;t see it.
+                <h2 className="font-bold text-foreground text-lg mb-2">Check your email</h2>
+                <p className="text-sm text-muted-foreground mb-1">
+                  We&apos;ve sent a verification link to your email address. Please verify your email before signing in.
                 </p>
+                <p className="text-sm font-semibold text-foreground mb-6">{form.email}</p>
+                {error && (
+                  <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 leading-relaxed mb-3 text-left">
+                    {error}
+                  </div>
+                )}
+                {resendMessage && (
+                  <div className="p-3.5 bg-green-50 border border-green-200 rounded-xl text-sm text-green-700 leading-relaxed mb-4 text-left">
+                    {resendMessage}
+                  </div>
+                )}
                 <button
                   type="button"
-                  onClick={() => { setAwaitingConfirmation(false); openAuth('login'); }}
+                  onClick={handleResendVerificationEmail}
+                  disabled={resendLoading}
+                  className="w-full py-3 border border-border text-foreground font-semibold rounded-2xl hover:border-primary hover:text-primary transition-colors disabled:opacity-60 disabled:cursor-not-allowed text-sm mb-3"
+                >
+                  {resendLoading ? 'Sending verification email…' : 'Resend verification email'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAwaitingConfirmation(false);
+                    setError('');
+                    setResendMessage('');
+                    openAuth('login');
+                  }}
                   className="w-full py-3 bg-primary text-white font-semibold rounded-2xl hover:bg-orange-600 transition-colors text-sm"
                 >
-                  Go to Sign In
+                  Back to login
                 </button>
               </div>
 
@@ -272,6 +322,12 @@ export default function AuthPage() {
                     </div>
                   )}
 
+                  {resendMessage && (
+                    <div className="p-3.5 bg-green-50 border border-green-200 rounded-xl text-sm text-green-700 leading-relaxed">
+                      {resendMessage}
+                    </div>
+                  )}
+
                   <button
                     type="submit"
                     disabled={loading}
@@ -287,6 +343,17 @@ export default function AuthPage() {
                       : 'Send Reset Link'}
                     {!loading && <ArrowRight className="w-4 h-4" />}
                   </button>
+
+                  {authMode === 'login' && (
+                    <button
+                      type="button"
+                      onClick={handleResendVerificationEmail}
+                      disabled={resendLoading}
+                      className="w-full py-2.5 border border-border text-foreground font-semibold rounded-xl hover:border-primary hover:text-primary transition-colors disabled:opacity-60 disabled:cursor-not-allowed text-sm"
+                    >
+                      {resendLoading ? 'Sending verification email…' : 'Resend verification email'}
+                    </button>
+                  )}
 
                   {authMode === 'register' && (
                     <p className="text-xs text-muted-foreground text-center pt-1">
