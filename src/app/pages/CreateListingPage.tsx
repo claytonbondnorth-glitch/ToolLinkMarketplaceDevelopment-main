@@ -1,5 +1,5 @@
-import { useState, useCallback, useRef } from 'react';
-import { Upload, X, Plus, ChevronLeft, CheckCircle, DollarSign, MapPin, Tag, Camera, Sparkles, Loader2, ChevronRight } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { Upload, X, Plus, ChevronLeft, CheckCircle, DollarSign, MapPin, Tag, Camera, Loader2, ChevronRight } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { supabase, SUPABASE_URL } from '../../lib/supabase';
 import { CATEGORIES, BRANDS } from '../data/mockData';
@@ -12,13 +12,6 @@ const PLACEHOLDER_IMAGES = [
   'https://images.unsplash.com/photo-1504148455328-c376907d081c?w=800&h=600&fit=crop&auto=format',
   'https://images.unsplash.com/photo-1572981779307-38b8cabb2407?w=800&h=600&fit=crop&auto=format',
   'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=800&h=600&fit=crop&auto=format',
-];
-
-/* Simulated AI suggestions per uploaded photo index */
-const AI_SUGGESTIONS = [
-  { brand: 'Milwaukee', categoryId: 'power-tools', category: 'Power Tools', title: 'Milwaukee M18 FUEL Cordless Drill/Driver Kit', price: '349', description: 'Milwaukee M18 FUEL 13mm drill/driver in excellent condition. Includes 2x 5.0Ah batteries, charger and belt clip. Brushless motor delivers superior run time. Light use only — upgrading to a larger kit.' },
-  { brand: 'DeWalt', categoryId: 'power-tools', category: 'Power Tools', title: 'DeWalt 18V XR Circular Saw with Batteries', price: '285', description: 'DeWalt DCS570 18V XR brushless circular saw. Cuts clean and true. Includes 2x 4.0Ah batteries and fast charger. Some cosmetic wear but mechanically perfect.' },
-  { brand: 'Makita', categoryId: 'hand-tools', category: 'Hand Tools', title: 'Makita Professional Tool Set — 45 Piece', price: '195', description: 'Complete Makita 45-piece hand tool set in blow-moulded case. Full socket set metric and imperial, combination spanners, hex keys, and screwdrivers. Light use, all tools present.' },
 ];
 
 async function uploadToStorage(file: File, userId: string): Promise<string | null> {
@@ -44,9 +37,6 @@ export default function CreateListingPage() {
   const [images, setImages] = useState<string[]>([]);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [dragging, setDragging] = useState(false);
-  const [aiDetecting, setAiDetecting] = useState(false);
-  const [aiDetected, setAiDetected] = useState(false);
-  const [aiSuggestion, setAiSuggestion] = useState<typeof AI_SUGGESTIONS[0] | null>(null);
 
   const [form, setForm] = useState({
     title: '',
@@ -82,17 +72,6 @@ export default function CreateListingPage() {
   const set = (field: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     setForm((prev) => ({ ...prev, [field]: e.target.value }));
 
-  const simulateAiDetect = useCallback((imgCount: number) => {
-    if (aiDetected) return;
-    setAiDetecting(true);
-    setTimeout(() => {
-      const suggestion = AI_SUGGESTIONS[imgCount % AI_SUGGESTIONS.length];
-      setAiSuggestion(suggestion);
-      setAiDetecting(false);
-      setAiDetected(true);
-    }, 1800);
-  }, [aiDetected]);
-
   const handleFileSelect = async (files: FileList | null) => {
     if (!files || !currentUser) return;
     const toUpload = Array.from(files).slice(0, 8 - images.length);
@@ -107,50 +86,22 @@ export default function CreateListingPage() {
     setUploadingImage(false);
 
     if (uploaded.length > 0) {
-      setImages((prev) => {
-        const next = [...prev, ...uploaded];
-        if (prev.length === 0 && next.length > 0) simulateAiDetect(0);
-        return next;
-      });
+      setImages((prev) => [...prev, ...uploaded]);
     }
-  };
-
-  const addDemoImage = () => {
-    // Trigger real file picker; fall back to placeholder if no user
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
-    } else if (images.length < 8) {
-      const nextImg = PLACEHOLDER_IMAGES[images.length % PLACEHOLDER_IMAGES.length];
-      setImages((prev) => {
-        const next = [...prev, nextImg];
-        if (next.length === 1) simulateAiDetect(0);
-        return next;
-      });
-    }
-  };
-
-  const applyAiSuggestion = () => {
-    if (!aiSuggestion) return;
-    setForm((prev) => ({
-      ...prev,
-      title: aiSuggestion.title,
-      description: aiSuggestion.description,
-      price: aiSuggestion.price,
-      brand: aiSuggestion.brand,
-      categoryId: aiSuggestion.categoryId,
-    }));
-    setAiSuggestion(null);
   };
 
   const removeImage = (index: number) => {
     setImages((prev) => prev.filter((_, i) => i !== index));
-    if (images.length <= 1) { setAiDetected(false); setAiSuggestion(null); }
   };
 
   const category = CATEGORIES.find((c) => c.id === form.categoryId);
-  const isStep1Valid = images.length > 0 && form.title.length >= 10;
-  const isStep2Valid = form.description.length >= 20 && form.brand && form.categoryId && form.condition;
-  const isStep3Valid = form.price && Number(form.price) > 0 && form.location && form.state;
+  const isStep1Valid = images.length > 0 && form.title.trim().length >= 10;
+  const isStep2Valid =
+    form.categoryId.trim().length > 0
+    && form.brand.trim().length > 0
+    && form.condition !== ''
+    && form.description.trim().length > 0;
+  const isStep3Valid = Number(form.price) > 0 && form.location.trim().length > 0 && form.state !== '';
 
   const handleSubmit = async () => {
     if (!currentUser || !form.condition || !form.state || submitting) return;
@@ -186,7 +137,7 @@ export default function CreateListingPage() {
           <button onClick={() => navigate('browse')} className="w-full py-3.5 bg-primary text-white font-bold rounded-2xl hover:bg-orange-600 transition-colors mb-3 shadow-lg shadow-primary/20">
             Browse Marketplace
           </button>
-          <button onClick={() => { setSubmitted(false); setStep(1); setImages([]); setAiDetected(false); setAiSuggestion(null); setForm({ title: '', description: '', price: '', brand: '', categoryId: '', condition: '', location: '', state: '' }); }}
+          <button onClick={() => { setSubmitted(false); setStep(1); setImages([]); setForm({ title: '', description: '', price: '', brand: '', categoryId: '', condition: '', location: '', state: '' }); }}
             className="w-full py-3.5 border border-[#EBEBEB] text-foreground font-semibold rounded-2xl hover:border-primary transition-colors text-sm">
             List Another Tool
           </button>
@@ -298,45 +249,6 @@ export default function CreateListingPage() {
                 </div>
               )}
             </div>
-
-            {/* AI detection banner */}
-            {aiDetecting && (
-              <div className="bg-[#111111] rounded-2xl p-5 flex items-center gap-4 text-white">
-                <div className="w-10 h-10 bg-primary/20 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <Loader2 className="w-5 h-5 text-primary animate-spin" />
-                </div>
-                <div>
-                  <p className="font-bold text-sm">Analysing your photo...</p>
-                  <p className="text-xs text-gray-400 mt-0.5">Our AI is detecting brand, model, and suggested price</p>
-                </div>
-              </div>
-            )}
-
-            {aiSuggestion && !aiDetecting && (
-              <div className="bg-white rounded-2xl border-2 border-primary/30 p-5 shadow-lg shadow-primary/5">
-                <div className="flex items-start gap-3 mb-4">
-                  <div className="w-10 h-10 bg-[#FFF0E6] rounded-xl flex items-center justify-center flex-shrink-0">
-                    <Sparkles className="w-5 h-5 text-primary" />
-                  </div>
-                  <div>
-                    <p className="font-bold text-foreground text-sm">AI Detected Your Tool</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">We've pre-filled your listing — review and confirm</p>
-                  </div>
-                  <button onClick={() => setAiSuggestion(null)} className="ml-auto p-1 rounded-lg hover:bg-[#F5F5F5] text-muted-foreground">
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-                <div className="bg-[#F9F9F9] rounded-xl p-4 space-y-2 text-sm mb-4">
-                  <div className="flex justify-between"><span className="text-muted-foreground">Brand</span><span className="font-semibold">{aiSuggestion.brand}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Category</span><span className="font-semibold">{aiSuggestion.category}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Suggested Price</span><span className="font-extrabold text-primary">${aiSuggestion.price}</span></div>
-                  <div><span className="text-muted-foreground">Title</span><p className="font-semibold mt-0.5 text-xs leading-snug">{aiSuggestion.title}</p></div>
-                </div>
-                <button onClick={applyAiSuggestion} className="w-full py-3 bg-primary text-white font-bold rounded-xl hover:bg-orange-600 transition-colors text-sm flex items-center justify-center gap-2">
-                  <Sparkles className="w-4 h-4" /> Apply AI Suggestions
-                </button>
-              </div>
-            )}
 
             {/* Title */}
             <div className="bg-white rounded-2xl border border-[#EBEBEB] p-6">
