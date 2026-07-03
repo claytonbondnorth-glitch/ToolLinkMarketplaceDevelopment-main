@@ -16,23 +16,6 @@ function isToolLinkVerificationConversation(conversation: { listingId: string | 
   return !conversation.listingId && conversation.messages.some((message) => isVerificationApprovalMessage(message.text));
 }
 
-function TypingIndicator() {
-  return (
-    <div className="flex items-end gap-2">
-      <div className="w-7 h-7 rounded-full bg-[#F0F0F0] flex-shrink-0" />
-      <div className="bg-white border border-[#EBEBEB] rounded-2xl rounded-bl-md px-4 py-3 flex items-center gap-1.5 shadow-sm">
-        {[0, 1, 2].map((i) => (
-          <span
-            key={i}
-            className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce"
-            style={{ animationDelay: `${i * 0.15}s`, animationDuration: '0.9s' }}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function formatTime(ts: string) {
   const d = new Date(ts);
   const now = new Date();
@@ -49,7 +32,6 @@ export default function MessagesPage() {
   const [search, setSearch] = useState('');
   const [showOffer, setShowOffer] = useState(false);
   const [offerPrice, setOfferPrice] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
@@ -117,9 +99,6 @@ export default function MessagesPage() {
     if (!input.trim() || !activeConvId) return;
     sendMessage(activeConvId, input.trim());
     setInput('');
-    // Simulate other party typing
-    setTimeout(() => setIsTyping(true), 800);
-    setTimeout(() => setIsTyping(false), 3200);
   };
 
   const handleSendOffer = () => {
@@ -127,8 +106,6 @@ export default function MessagesPage() {
     sendMessage(activeConvId, `💰 Offer: $${Number(offerPrice).toLocaleString()} AUD — Let me know if this works for you.`);
     setShowOffer(false);
     setOfferPrice('');
-    setTimeout(() => setIsTyping(true), 1000);
-    setTimeout(() => setIsTyping(false), 3500);
   };
 
   useEffect(() => {
@@ -384,7 +361,6 @@ export default function MessagesPage() {
                   </div>
                 );
               })}
-              {isTyping && <TypingIndicator />}
               <div ref={messagesEndRef} />
             </div>
 

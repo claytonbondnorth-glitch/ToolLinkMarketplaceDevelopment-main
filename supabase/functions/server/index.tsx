@@ -5,6 +5,17 @@ import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
 
 const app = new Hono();
 
+const EMPTY_IMAGE_RECOGNITION_RESULT = {
+  toolType: "",
+  brand: "",
+  model: "",
+  category: "",
+  condition: "",
+  suggestedTitle: "",
+  suggestedDescription: "",
+  confidence: 0,
+};
+
 app.use('*', logger(console.log));
 app.use("/*", cors({
   origin: "*",
@@ -16,6 +27,38 @@ app.use("/*", cors({
 
 // Health check
 app.get("/make-server-b9282161/health", (c) => c.json({ status: "ok" }));
+
+// Listing image recognition (architecture placeholder only; AI integration is intentionally not implemented yet)
+app.post("/make-server-b9282161/analyze-listing-images", async (c) => {
+  try {
+    const body = await c.req.json().catch(() => null);
+    const imageUrls = Array.isArray(body?.imageUrls)
+      ? body.imageUrls.filter((item: unknown) => typeof item === "string" && item.trim().length > 0)
+      : [];
+
+    if (imageUrls.length === 0) {
+      return c.json({
+        ok: false,
+        message: "At least one uploaded image URL is required.",
+        result: EMPTY_IMAGE_RECOGNITION_RESULT,
+      }, 400);
+    }
+
+    // TODO: Future implementation will call OpenAI Vision API and map model output
+    // into the structured result contract returned here.
+    return c.json({
+      ok: true,
+      message: "Image recognition endpoint is ready. AI provider integration is not enabled yet.",
+      result: EMPTY_IMAGE_RECOGNITION_RESULT,
+    });
+  } catch (error: any) {
+    return c.json({
+      ok: false,
+      message: error?.message ?? "Unable to process image recognition request.",
+      result: EMPTY_IMAGE_RECOGNITION_RESULT,
+    }, 500);
+  }
+});
 
 // Schema setup — runs all DDL using the service role via the Management API or direct postgres
 app.post("/make-server-b9282161/setup-schema", async (c) => {

@@ -101,6 +101,16 @@ interface AppContextValue {
   savedIds: Set<string>;
   toggleSave: (listingId: string) => Promise<void>;
   addListing: (listing: Omit<AppListing, 'id' | 'dateListed' | 'views' | 'reportCount' | 'status'>) => Promise<string | null>;
+  updateListing: (listingId: string, updates: {
+    title: string;
+    description: string;
+    categoryId: string;
+    brand: string;
+    condition: string;
+    price: number;
+    location: string;
+    state: string;
+  }) => Promise<void>;
   deleteListing: (listingId: string) => Promise<void>;
 
   conversations: AppConversation[];
@@ -581,9 +591,72 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return null;
   }, [currentUser]);
 
+  const updateListing = useCallback(async (listingId: string, updates: {
+    title: string;
+    description: string;
+    categoryId: string;
+    brand: string;
+    condition: string;
+    price: number;
+    location: string;
+    state: string;
+  }) => {
+    if (!currentUser?.id) {
+      throw new Error('You must be signed in to edit this listing.');
+    }
+
+    const selectedCategory = CATEGORIES.find((category) => category.id === updates.categoryId);
+
+    const { data, error } = await supabase
+      .from('listings')
+      .update({
+        title: updates.title,
+        description: updates.description,
+        category_id: updates.categoryId,
+        category: selectedCategory?.name ?? updates.categoryId,
+        brand: updates.brand,
+        condition: updates.condition,
+        price: updates.price,
+        location: `${updates.location}, ${updates.state}`,
+        state: updates.state,
+      })
+      .eq('id', listingId)
+      .eq('seller_id', currentUser.id)
+      .select('*')
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    if (!data) {
+      throw new Error('Listing update failed: listing not found or permission denied.');
+    }
+
+    setListings((prev) => prev.map((listing) => (
+      listing.id === listingId ? rowToListing(data) : listing
+    )));
+  }, [currentUser?.id]);
+
   const deleteListing = useCallback(async (listingId: string) => {
-    if (!currentUser) return;
-    await supabase.from('listings').delete().eq('id', listingId).eq('seller_id', currentUser.id);
+    if (!currentUser?.id) {
+      throw new Error('You must be signed in to delete this listing.');
+    }
+
+    const { error, count } = await supabase
+      .from('listings')
+      .delete({ count: 'exact' })
+      .eq('id', listingId)
+      .eq('seller_id', currentUser.id);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    if (!count) {
+      throw new Error('Listing deletion failed: listing not found or permission denied.');
+    }
+
     setListings(prev => prev.filter(l => l.id !== listingId));
   }, [currentUser]);
 
@@ -809,7 +882,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       currentPage, navParams, navigate,
       currentUser, authLoading, login, register, logout, updateProfile,
       showAuth, authMode, openAuth, closeAuth,
-      listings, listingsLoading, savedIds, toggleSave, addListing, deleteListing,
+      listings, listingsLoading, savedIds, toggleSave, addListing, updateListing, deleteListing,
       conversations, sendMessage, startConversation, markConversationAsRead, unreadCount,
       users, refreshUserProfiles, updateListingStatus, deleteListingAdmin, deleteUserAdmin,
       schemaReady, schemaError,

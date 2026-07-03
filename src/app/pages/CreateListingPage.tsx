@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext';
 import { supabase, SUPABASE_URL } from '../../lib/supabase';
 import { CATEGORIES, BRANDS } from '../data/mockData';
 import type { Condition, AusState } from '../data/mockData';
+import { analyzeListingImages, type ListingImageRecognitionResult } from '../lib/listingImageRecognition';
 
 const CONDITIONS: Condition[] = ['New', 'Used - Like New', 'Used - Good', 'Used - Fair', 'For Parts'];
 const STATES: AusState[] = ['NSW', 'VIC', 'QLD', 'WA', 'SA', 'TAS', 'NT', 'ACT'];
@@ -37,6 +38,8 @@ export default function CreateListingPage() {
   const [images, setImages] = useState<string[]>([]);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [imageRecognitionLoading, setImageRecognitionLoading] = useState(false);
+  const [imageRecognitionResult, setImageRecognitionResult] = useState<ListingImageRecognitionResult | null>(null);
 
   const [form, setForm] = useState({
     title: '',
@@ -72,6 +75,57 @@ export default function CreateListingPage() {
   const set = (field: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     setForm((prev) => ({ ...prev, [field]: e.target.value }));
 
+  const applyRecognitionResultToForm = (result: ListingImageRecognitionResult) => {
+    const normalizedCategoryId = result.category
+      ? CATEGORIES.find((category) => {
+        const id = category.id.toLowerCase();
+        const name = category.name.toLowerCase();
+        const incoming = result.category.trim().toLowerCase();
+        return id === incoming || name === incoming;
+      })?.id ?? ''
+      : '';
+
+    const normalizedCondition = result.condition
+      ? CONDITIONS.find((condition) => condition.toLowerCase() === result.condition.trim().toLowerCase()) ?? ''
+      : '';
+
+    setForm((prev) => ({
+      ...prev,
+      title: prev.title.trim() ? prev.title : result.suggestedTitle,
+      description: prev.description.trim() ? prev.description : result.suggestedDescription,
+      brand: prev.brand.trim() ? prev.brand : result.brand,
+      categoryId: prev.categoryId.trim() ? prev.categoryId : normalizedCategoryId,
+      condition: prev.condition || normalizedCondition,
+    }));
+  };
+
+  const requestImageRecognition = async (imageUrls: string[]) => {
+    if (!currentUser || imageUrls.length === 0) return;
+
+    setImageRecognitionLoading(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const response = await analyzeListingImages({
+        imageUrls,
+        accessToken: sessionData.session?.access_token,
+        listingContext: {
+          title: form.title,
+          description: form.description,
+          brand: form.brand,
+          categoryId: form.categoryId,
+          condition: form.condition,
+        },
+      });
+
+      setImageRecognitionResult(response.result);
+    } catch (error) {
+      console.error('Image recognition request failed:', error);
+      setImageRecognitionResult(null);
+    } finally {
+      setImageRecognitionLoading(false);
+    }
+  };
+
   const handleFileSelect = async (files: FileList | null) => {
     if (!files || !currentUser) return;
     const toUpload = Array.from(files).slice(0, 8 - images.length);
@@ -86,7 +140,9 @@ export default function CreateListingPage() {
     setUploadingImage(false);
 
     if (uploaded.length > 0) {
-      setImages((prev) => [...prev, ...uploaded]);
+      const nextImages = [...images, ...uploaded];
+      setImages(nextImages);
+      void requestImageRecognition(nextImages);
     }
   };
 
@@ -137,7 +193,7 @@ export default function CreateListingPage() {
           <button onClick={() => navigate('browse')} className="w-full py-3.5 bg-primary text-white font-bold rounded-2xl hover:bg-orange-600 transition-colors mb-3 shadow-lg shadow-primary/20">
             Browse Marketplace
           </button>
-          <button onClick={() => { setSubmitted(false); setStep(1); setImages([]); setForm({ title: '', description: '', price: '', brand: '', categoryId: '', condition: '', location: '', state: '' }); }}
+          <button onClick={() => { setSubmitted(false); setStep(1); setImages([]); setImageRecognitionLoading(false); setImageRecognitionResult(null); setForm({ title: '', description: '', price: '', brand: '', categoryId: '', condition: '', location: '', state: '' }); }}
             className="w-full py-3.5 border border-[#EBEBEB] text-foreground font-semibold rounded-2xl hover:border-primary transition-colors text-sm">
             List Another Tool
           </button>
@@ -249,6 +305,27 @@ export default function CreateListingPage() {
                 </div>
               )}
             </div>
+
+            {imageRecognitionLoading && (
+              <div className="bg-white rounded-2xl border border-[#EBEBEB] p-4">
+                <p className="text-sm font-semibold text-foreground">Preparing image recognition analysis...</p>
+                <p className="text-xs text-muted-foreground mt-1">Your photos were uploaded successfully. Recognition results will be available once AI integration is enabled.</p>
+              </div>
+            )}
+
+            {imageRecognitionResult && (
+              <div className="bg-white rounded-2xl border border-[#EBEBEB] p-4">
+                <p className="text-sm font-semibold text-foreground">Image recognition response received</p>
+                <p className="text-xs text-muted-foreground mt-1">You can apply any available suggestions to empty fields in your listing form.</p>
+                <button
+                  type="button"
+                  onClick={() => applyRecognitionResultToForm(imageRecognitionResult)}
+                  className="mt-3 inline-flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2 text-xs font-bold text-white hover:bg-orange-600 transition-colors"
+                >
+                  Apply Recognition Suggestions
+                </button>
+              </div>
+            )}
 
             {/* Title */}
             <div className="bg-white rounded-2xl border border-[#EBEBEB] p-6">

@@ -1,21 +1,25 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Camera, Edit2, Save, MapPin, Star, Package, Heart, Settings, X, CheckCircle, Loader2 } from 'lucide-react';
+import { Camera, Edit2, Save, MapPin, Star, Package, Heart, Settings, X, CheckCircle, Loader2, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '../context/AppContext';
 import ListingCard from '../components/ListingCard';
 import { supabase } from '../../lib/supabase';
 import UserAvatar from '../components/UserAvatar';
 import { getVerificationBadgeLabel } from '../lib/verification';
+import { CATEGORIES, BRANDS } from '../data/mockData';
+import type { AppListing } from '../context/AppContext';
+import type { Condition } from '../data/mockData';
 
 type Tab = 'listings' | 'saved' | 'settings';
 
 const STATES = ['NSW', 'VIC', 'QLD', 'WA', 'SA', 'TAS', 'NT', 'ACT'];
+const LISTING_CONDITIONS: Condition[] = ['New', 'Used - Like New', 'Used - Good', 'Used - Fair', 'For Parts'];
 
 type VerificationApplicationStatus = 'pending' | 'approved' | 'rejected' | null;
 type VerificationApplicationType = 'tradie' | 'business';
 
 export default function ProfilePage() {
-  const { currentUser, updateProfile, listings, savedIds, navigate, openAuth, logout, refreshUserProfiles } = useApp();
+  const { currentUser, updateProfile, listings, savedIds, navigate, openAuth, logout, refreshUserProfiles, updateListing, deleteListing } = useApp();
   const [tab, setTab] = useState<Tab>('listings');
   const [editing, setEditing] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -24,6 +28,8 @@ export default function ProfilePage() {
   const [submittingVerification, setSubmittingVerification] = useState(false);
   const [showVerificationSuccessScreen, setShowVerificationSuccessScreen] = useState(false);
   const [latestVerificationStatus, setLatestVerificationStatus] = useState<VerificationApplicationStatus>(null);
+  const [editingListing, setEditingListing] = useState<AppListing | null>(null);
+  const [savingListingEdit, setSavingListingEdit] = useState(false);
   const [verificationForm, setVerificationForm] = useState({
     verificationType: 'tradie' as VerificationApplicationType,
     fullName: currentUser?.name ?? '',
@@ -45,6 +51,16 @@ export default function ProfilePage() {
     location: currentUser?.location?.split(',')[0]?.trim() ?? '',
     state: currentUser?.state ?? 'NSW',
     phone: currentUser?.phone ?? '',
+  });
+  const [listingEditForm, setListingEditForm] = useState({
+    title: '',
+    description: '',
+    categoryId: '',
+    brand: '',
+    condition: '' as Condition | '',
+    price: '',
+    location: '',
+    state: 'NSW',
   });
 
   if (!currentUser) {
@@ -182,6 +198,75 @@ export default function ProfilePage() {
 
   const setEdit = (field: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     setEditForm((prev) => ({ ...prev, [field]: e.target.value }));
+
+  const setListingEdit = (field: keyof typeof listingEditForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+    setListingEditForm((prev) => ({ ...prev, [field]: e.target.value }));
+
+  const openListingEditor = (listing: AppListing) => {
+    const [locationPart = listing.location, statePart = listing.state || 'NSW'] = listing.location.includes(',')
+      ? listing.location.split(',').map((value) => value.trim())
+      : [listing.location, listing.state || 'NSW'];
+
+    setEditingListing(listing);
+    setListingEditForm({
+      title: listing.title,
+      description: listing.description,
+      categoryId: listing.categoryId,
+      brand: listing.brand,
+      condition: (LISTING_CONDITIONS.includes(listing.condition as Condition) ? listing.condition : 'Used - Good') as Condition,
+      price: String(listing.price),
+      location: locationPart,
+      state: statePart || 'NSW',
+    });
+  };
+
+  const closeListingEditor = () => {
+    setEditingListing(null);
+    setSavingListingEdit(false);
+  };
+
+  const handleSaveListingEdit = async () => {
+    if (!editingListing || !currentUser || editingListing.sellerId !== currentUser.id) return;
+
+    if (!listingEditForm.title.trim() || !listingEditForm.description.trim() || !listingEditForm.categoryId || !listingEditForm.brand || !listingEditForm.condition || !listingEditForm.location.trim() || !listingEditForm.state || Number(listingEditForm.price) <= 0) {
+      toast.error('Please complete all required listing fields before saving.');
+      return;
+    }
+
+    setSavingListingEdit(true);
+    try {
+      await updateListing(editingListing.id, {
+        title: listingEditForm.title.trim(),
+        description: listingEditForm.description.trim(),
+        categoryId: listingEditForm.categoryId,
+        brand: listingEditForm.brand,
+        condition: listingEditForm.condition,
+        price: Number(listingEditForm.price),
+        location: listingEditForm.location.trim(),
+        state: listingEditForm.state,
+      });
+      toast.success('Listing updated successfully.');
+      closeListingEditor();
+    } catch (error: any) {
+      toast.error(error?.message || 'Unable to update your listing right now.');
+      setSavingListingEdit(false);
+    }
+  };
+
+  const handleDeleteListing = async (listing: AppListing) => {
+    if (!currentUser || listing.sellerId !== currentUser.id) return;
+
+    const confirmed = window.confirm(`Delete "${listing.title}"? This action cannot be undone.`);
+    if (!confirmed) return;
+
+    try {
+      await deleteListing(listing.id);
+      toast.success('Listing deleted successfully.');
+      if (editingListing?.id === listing.id) closeListingEditor();
+    } catch (error: any) {
+      toast.error(error?.message || 'Unable to delete your listing right now.');
+    }
+  };
 
   const handleSave = async () => {
     await updateProfile({
@@ -461,7 +546,29 @@ export default function ProfilePage() {
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {myListings.map((l) => <ListingCard key={l.id} listing={l} />)}
+                {myListings.map((l) => (
+                  <div key={l.id} className="space-y-2">
+                    <ListingCard listing={l} />
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openListingEditor(l)}
+                        className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl border border-border bg-white px-3 py-2 text-xs font-semibold text-foreground hover:border-primary hover:text-primary transition-colors"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                        Edit Listing
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteListing(l)}
+                        className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl border border-destructive/30 bg-white px-3 py-2 text-xs font-semibold text-destructive hover:bg-red-50 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Delete Listing
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -645,6 +752,95 @@ export default function ProfilePage() {
             >
               Sign Out
             </button>
+          </div>
+        )}
+
+        {editingListing && (
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={closeListingEditor} />
+            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-5">
+                <div>
+                  <h3 className="font-bold text-foreground">Edit Listing</h3>
+                  <p className="text-sm text-muted-foreground">Update your listing details.</p>
+                </div>
+                <button type="button" onClick={closeListingEditor} className="p-1.5 rounded-lg hover:bg-muted transition-colors">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-foreground mb-1.5">Title</label>
+                  <input value={listingEditForm.title} onChange={setListingEdit('title')} className="w-full px-3 py-2.5 rounded-xl border border-border bg-input-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-foreground mb-1.5">Description</label>
+                  <textarea value={listingEditForm.description} onChange={setListingEdit('description')} rows={4} className="w-full px-3 py-2.5 rounded-xl border border-border bg-input-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-foreground mb-1.5">Category</label>
+                    <select value={listingEditForm.categoryId} onChange={setListingEdit('categoryId')} className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
+                      <option value="">Select a category</option>
+                      {CATEGORIES.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-foreground mb-1.5">Brand</label>
+                    <select value={listingEditForm.brand} onChange={setListingEdit('brand')} className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
+                      <option value="">Select a brand</option>
+                      {BRANDS.map((brand) => <option key={brand} value={brand}>{brand}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-foreground mb-1.5">Condition</label>
+                    <select value={listingEditForm.condition} onChange={setListingEdit('condition')} className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
+                      <option value="">Select condition</option>
+                      {LISTING_CONDITIONS.map((condition) => <option key={condition} value={condition}>{condition}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-foreground mb-1.5">Price (AUD)</label>
+                    <input type="number" min="1" value={listingEditForm.price} onChange={setListingEdit('price')} className="w-full px-3 py-2.5 rounded-xl border border-border bg-input-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-foreground mb-1.5">Suburb / City</label>
+                    <input value={listingEditForm.location} onChange={setListingEdit('location')} className="w-full px-3 py-2.5 rounded-xl border border-border bg-input-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-foreground mb-1.5">State</label>
+                    <select value={listingEditForm.state} onChange={setListingEdit('state')} className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
+                      {STATES.map((state) => <option key={state} value={state}>{state}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                {editingListing.images.length > 0 && (
+                  <div>
+                    <label className="block text-xs font-semibold text-foreground mb-2">Photos</label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {editingListing.images.slice(0, 4).map((imageUrl, index) => (
+                        <img key={index} src={imageUrl} alt="" className="h-16 w-full rounded-lg object-cover" />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button type="button" onClick={closeListingEditor} className="flex-1 py-3 border-2 border-[#EBEBEB] text-foreground font-semibold rounded-xl hover:border-primary transition-colors">Cancel</button>
+                <button type="button" onClick={handleSaveListingEdit} disabled={savingListingEdit} className="flex-1 py-3 bg-primary text-white font-semibold rounded-xl hover:bg-orange-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed">{savingListingEdit ? 'Saving...' : 'Save Listing'}</button>
+              </div>
+            </div>
           </div>
         )}
       </div>
