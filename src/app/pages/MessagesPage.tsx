@@ -36,7 +36,7 @@ export default function MessagesPage() {
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
-  const [hasReviewedCurrentListing, setHasReviewedCurrentListing] = useState(false);
+  const [hasReviewedCurrentListing, setHasReviewedCurrentListing] = useState<boolean | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -112,23 +112,27 @@ export default function MessagesPage() {
     setReviewOpen(false);
     setReviewComment('');
     setReviewRating(5);
-    setHasReviewedCurrentListing(false);
+    setHasReviewedCurrentListing(null);
   }, [activeConvId]);
 
   useEffect(() => {
     if (!currentUser || !activeListing?.id || activeListing.status !== 'sold' || !activeListing.soldToUserId) {
-      setHasReviewedCurrentListing(false);
+      setHasReviewedCurrentListing(null);
       return;
     }
 
     let isActive = true;
     async function checkExistingReview() {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('reviews')
         .select('id')
         .eq('listing_id', activeListing.id)
         .eq('reviewer_id', currentUser.id)
         .maybeSingle();
+
+      if (error) {
+        console.error('Review existence check failed:', error);
+      }
 
       if (isActive) {
         setHasReviewedCurrentListing(Boolean(data));
@@ -374,10 +378,14 @@ export default function MessagesPage() {
                     <div className="flex-1">
                       <p className="text-sm font-semibold text-foreground">This item has been marked as sold.</p>
                       <p className="text-xs text-muted-foreground mt-1">Thanks for completing the transaction.</p>
-                      {hasReviewedCurrentListing ? (
+                      {hasReviewedCurrentListing === true ? (
                         <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-green-50 px-3 py-1.5 text-sm font-semibold text-green-700">
                           <CheckCircle2 className="w-4 h-4" />
                           Review submitted
+                        </div>
+                      ) : hasReviewedCurrentListing === null ? (
+                        <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-muted px-3 py-1.5 text-sm font-semibold text-muted-foreground">
+                          Checking review status...
                         </div>
                       ) : reviewOpen ? (
                         <div className="mt-3 space-y-3">

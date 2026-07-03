@@ -1,64 +1,79 @@
 import { useEffect, useState, useCallback } from 'react';
-import { MapPin, Star, CheckCircle, Package, Calendar, MessageSquare, ChevronRight } from 'lucide-react';
+import { MapPin, Star, CheckCircle, Package, Calendar, MessageSquare } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import ListingCard from '../components/ListingCard';
 import { supabase } from '../../lib/supabase';
 import UserAvatar from '../components/UserAvatar';
 import { getVerificationBadgeLabel } from '../lib/verification';
 
-const REVIEWS = [
-  { id: 'r1', reviewer: 'Dave K.', rating: 5, text: 'Gear was exactly as described. Fast to respond, easy transaction. Would buy again.', date: '2024-11-20' },
-  { id: 'r2', reviewer: 'Sarah M.', rating: 5, text: 'Great seller — honest about condition, good price. Highly recommend.', date: '2024-10-15' },
-  { id: 'r3', reviewer: 'Pete J.', rating: 4, text: 'Good kit, fair deal. Took a day to respond but got there in the end.', date: '2024-09-02' },
-];
+type SellerReview = {
+  id: string;
+  reviewerId: string;
+  rating: number;
+  comment: string;
+  createdAt: string;
+};
 
 export default function SellerProfilePage() {
   const { navParams, listings, navigate, currentUser, openAuth, startConversation, users } = useApp();
   const seller = users.find((u) => u.id === navParams.userId);
+  const [sellerReviews, setSellerReviews] = useState<SellerReview[]>([]);
   const [sellerStats, setSellerStats] = useState({ reviewCount: 0, averageRating: 0 });
 
-  const loadSellerStats = useCallback(async (userId: string) => {
+  const loadSellerReviews = useCallback(async (userId: string) => {
     if (!userId) {
+      setSellerReviews([]);
       setSellerStats({ reviewCount: 0, averageRating: 0 });
       return;
     }
 
     const { data, error } = await supabase
       .from('reviews')
-      .select('rating')
-      .eq('reviewed_user_id', userId);
+      .select('id, reviewer_id, rating, comment, created_at')
+      .eq('reviewed_user_id', userId)
+      .order('created_at', { ascending: false });
 
     if (error) {
       console.error('Failed to load seller review stats:', error);
+      setSellerReviews([]);
       setSellerStats({ reviewCount: 0, averageRating: 0 });
       return;
     }
 
-    const ratings = (data ?? [])
+    const normalizedReviews = (data ?? []).map((row: any) => ({
+      id: row.id,
+      reviewerId: row.reviewer_id,
+      rating: Number(row.rating),
+      comment: row.comment ?? '',
+      createdAt: row.created_at,
+    }));
+
+    const ratings = normalizedReviews
       .map((row: any) => Number(row.rating))
       .filter((value) => Number.isFinite(value));
 
     const reviewCount = ratings.length;
     const averageRating = reviewCount > 0 ? ratings.reduce((sum, value) => sum + value, 0) / reviewCount : 0;
 
+    setSellerReviews(normalizedReviews);
     setSellerStats({ reviewCount, averageRating });
   }, []);
 
   useEffect(() => {
     if (!seller?.id) return;
 
-    loadSellerStats(seller.id);
+    loadSellerReviews(seller.id);
 
     const channel = supabase.channel(`seller-stats-${seller.id}`);
     channel.on(
       'postgres_changes',
       {
-        event: 'INSERT',
+        event: '*',
         schema: 'public',
         table: 'reviews',
         filter: `reviewed_user_id=eq.${seller.id}`,
       },
-      () => loadSellerStats(seller.id)
+      () => loadSellerReviews(seller.id)
     );
 
     channel.subscribe();
@@ -66,7 +81,7 @@ export default function SellerProfilePage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [seller?.id, loadSellerStats]);
+  }, [seller?.id, loadSellerReviews]);
 
   if (!seller) {
     return (
@@ -205,26 +220,27 @@ export default function SellerProfilePage() {
           <div>
             <h2 className="text-lg font-bold text-foreground mb-5">Reviews</h2>
             <div className="space-y-4">
-              {REVIEWS.map((review) => (
-                <div key={review.id} className="bg-white rounded-xl border border-border p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-sm font-semibold text-foreground">{review.reviewer}</p>
-                    <div className="flex items-center gap-0.5">
-                      {[...Array(review.rating)].map((_, i) => <Star key={i} className="w-3.5 h-3.5 fill-primary text-primary" />)}
-                    </div>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{review.text}</p>
-                  <p className="text-xs text-muted-foreground mt-2">{new Date(review.date).toLocaleDateString('en-AU', { month: 'short', year: 'numeric' })}</p>
+              {sellerReviews.length === 0 ? (
+                <div className="bg-white rounded-xl border border-border p-4 text-center">
+                  <p className="text-sm text-muted-foreground">No reviews yet</p>
                 </div>
-              ))}
-              <div className="bg-white rounded-xl border border-border p-4 text-center">
-                <p className="text-sm text-muted-foreground">
-                  Showing 3 of {parsedReviewCount} reviews
-                </p>
-                <button className="flex items-center gap-1 text-sm text-primary font-medium mx-auto mt-2 hover:underline">
-                  View all reviews <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
+              ) : (
+                sellerReviews.map((review) => {
+                  const reviewer = users.find((user) => user.id === review.reviewerId);
+                  return (
+                    <div key={review.id} className="bg-white rounded-xl border border-border p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-sm font-semibold text-foreground">{reviewer?.name ?? 'User'}</p>
+                        <div className="flex items-center gap-0.5">
+                          {[...Array(Math.max(1, Math.min(5, Math.round(review.rating))))].map((_, i) => <Star key={i} className="w-3.5 h-3.5 fill-primary text-primary" />)}
+                        </div>
+                      </div>
+                      {review.comment && <p className="text-sm text-muted-foreground leading-relaxed">{review.comment}</p>}
+                      <p className="text-xs text-muted-foreground mt-2">{new Date(review.createdAt).toLocaleDateString('en-AU', { month: 'short', year: 'numeric' })}</p>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         </div>
