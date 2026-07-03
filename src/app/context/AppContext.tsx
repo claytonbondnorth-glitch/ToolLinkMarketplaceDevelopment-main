@@ -831,6 +831,103 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const transitionedToSold = targetStatus === 'sold' && listing?.status !== 'sold';
     if (!transitionedToSold || !listing?.sellerId) return { success: true };
 
+    // Notify only users connected to this listing when it first transitions to sold.
+    try {
+      const sellerId = listing.sellerId;
+
+      const ensureConversationIdForRecipient = async (recipientUserId: string): Promise<string | null> => {
+        const { data: existingConversation, error: existingConversationError } = await supabase
+          .from('conversations')
+          .select('id')
+          .eq('listing_id', listingId)
+          .eq('seller_id', sellerId)
+          .eq('buyer_id', recipientUserId)
+          .maybeSingle();
+
+        if (existingConversationError) {
+          console.error('Failed to load conversation for sold notification:', existingConversationError);
+          return null;
+        }
+
+        if (existingConversation?.id) return existingConversation.id;
+
+        const { data: insertedConversation, error: insertConversationError } = await supabase
+          .from('conversations')
+          .insert({ listing_id: listingId, buyer_id: recipientUserId, seller_id: sellerId })
+          .select('id')
+          .maybeSingle();
+
+        if (insertConversationError || !insertedConversation?.id) {
+          console.error('Failed to create conversation for sold notification:', insertConversationError);
+          return null;
+        }
+
+        return insertedConversation.id;
+      };
+
+      const sendNotificationMessage = async (recipientUserId: string, text: string) => {
+        const conversationId = await ensureConversationIdForRecipient(recipientUserId);
+        if (!conversationId) return;
+
+        const { error: insertMessageError } = await supabase
+          .from('messages')
+          .insert({
+            conversation_id: conversationId,
+            sender_id: sellerId,
+            text,
+          });
+
+        if (insertMessageError) {
+          console.error('Failed to send sold notification message:', insertMessageError);
+        }
+      };
+
+      if (soldToUserId && soldToUserId !== sellerId) {
+        await sendNotificationMessage(
+          soldToUserId,
+          'Congratulations — this item has been marked as sold to you. You can now leave a review in your messages for this listing.'
+        );
+      }
+
+      const connectedUserIds = new Set<string>();
+
+      const { data: conversationRows, error: conversationRowsError } = await supabase
+        .from('conversations')
+        .select('buyer_id')
+        .eq('listing_id', listingId)
+        .eq('seller_id', sellerId);
+
+      if (conversationRowsError) {
+        console.error('Failed to read listing conversations for sold notifications:', conversationRowsError);
+      } else {
+        (conversationRows ?? []).forEach((row: any) => {
+          if (row?.buyer_id) connectedUserIds.add(row.buyer_id);
+        });
+      }
+
+      const { data: savedRows, error: savedRowsError } = await supabase
+        .from('saved_listings')
+        .select('user_id')
+        .eq('listing_id', listingId);
+
+      if (savedRowsError) {
+        console.error('Failed to read saved users for sold notifications:', savedRowsError);
+      } else {
+        (savedRows ?? []).forEach((row: any) => {
+          if (row?.user_id) connectedUserIds.add(row.user_id);
+        });
+      }
+
+      connectedUserIds.delete(sellerId);
+      if (soldToUserId) connectedUserIds.delete(soldToUserId);
+
+      for (const recipientUserId of connectedUserIds) {
+        await sendNotificationMessage(recipientUserId, 'This listing has now been sold.');
+      }
+    } catch (notificationError) {
+      console.error('Sold notification flow failed:', notificationError);
+    }
+
     const { data: profileRow, error: profileSelectError } = await supabase
       .from('profiles')
       .select('total_listings')
