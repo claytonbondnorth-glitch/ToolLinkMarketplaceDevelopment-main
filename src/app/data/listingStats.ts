@@ -13,6 +13,20 @@ const DEFAULT_STAT_COUNTS: Record<MarketplaceStatistic, number> = {
 const COMPLETED_SALE_STATUS = 'sold';
 const SALE_COMPLETED_AT_COLUMN = 'created_at';
 
+async function countSoldListingsWithBuyer(): Promise<number> {
+  const { count, error } = await supabase
+    .from('listings')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', COMPLETED_SALE_STATUS)
+    .not('sold_to_user_id', 'is', null);
+
+  if (error) {
+    throw error;
+  }
+
+  return count ?? 0;
+}
+
 function getCurrentMonthRange() {
   const now = new Date();
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
@@ -66,6 +80,20 @@ async function countCitiesCoveredFromListings(): Promise<number> {
 
 export async function getMarketplaceStatisticCount(statistic: MarketplaceStatistic): Promise<number> {
   try {
+    if (statistic === 'activeListings') {
+      const { count, error } = await supabase
+        .from('listings')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'active');
+
+      if (error) throw error;
+      return count ?? 0;
+    }
+
+    if (statistic === 'verifiedTrades' || statistic === 'completedTransactions') {
+      return await countSoldListingsWithBuyer();
+    }
+
     if (statistic === 'salesThisMonth') {
       return await countCompletedSalesThisMonth();
     }

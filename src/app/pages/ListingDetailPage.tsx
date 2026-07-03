@@ -93,13 +93,13 @@ export default function ListingDetailPage() {
 
     setIsMarkingSold(true);
     try {
-      const result = await updateListingStatus(listing.id, 'pending_completion', selectedBuyerId);
+      const result = await updateListingStatus(listing.id, 'sold', selectedBuyerId);
       if (!result.success) {
         toast.error(result.errorMessage || 'Unable to mark listing as sold right now.');
         return;
       }
       setShowSoldModal(false);
-      toast.success('Sale marked as pending buyer confirmation.');
+      toast.success('Sale marked as sold.');
     } finally {
       setIsMarkingSold(false);
     }

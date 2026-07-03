@@ -43,7 +43,7 @@ function formatTime(ts: string) {
 }
 
 export default function MessagesPage() {
-  const { currentUser, conversations, listings, sendMessage, navigate, openAuth, navParams, users, markConversationAsRead, refreshUserProfiles, confirmListingCompletion } = useApp();
+  const { currentUser, conversations, listings, sendMessage, navigate, openAuth, navParams, users, markConversationAsRead, refreshUserProfiles } = useApp();
   const [activeConvId, setActiveConvId] = useState<string | null>(navParams.conversationId ?? null);
   const [input, setInput] = useState('');
   const [search, setSearch] = useState('');
@@ -54,7 +54,6 @@ export default function MessagesPage() {
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
-  const [confirmingCompletion, setConfirmingCompletion] = useState(false);
   const [hasReviewedCurrentListing, setHasReviewedCurrentListing] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -109,21 +108,6 @@ export default function MessagesPage() {
     activeConv.participantIds.includes(activeListing.sellerId) &&
     activeConv.participantIds.includes(activeListing.soldToUserId)
   );
-  const isPendingCompletionConversation = Boolean(
-    activeConv
-    && activeListing
-    && activeListing.status === 'pending_completion'
-    && activeListing.soldToUserId
-    && activeConv.participantIds.includes(activeListing.sellerId)
-    && activeConv.participantIds.includes(activeListing.soldToUserId)
-  );
-  const canBuyerConfirmCompletion = Boolean(
-    isPendingCompletionConversation
-    && currentUser
-    && activeListing
-    && activeListing.soldToUserId === currentUser.id
-    && currentUser.id !== activeListing.sellerId
-  );
   const isBuyerReview = Boolean(currentUser && activeListing && currentUser.id === activeListing.soldToUserId && currentUser.id !== activeListing.sellerId);
   const reviewTargetUser = isBuyerReview
     ? users.find((u) => u.id === activeListing?.sellerId)
@@ -145,22 +129,6 @@ export default function MessagesPage() {
     setOfferPrice('');
     setTimeout(() => setIsTyping(true), 1000);
     setTimeout(() => setIsTyping(false), 3500);
-  };
-
-  const handleConfirmPurchaseCompleted = async () => {
-    if (!activeListing) return;
-
-    setConfirmingCompletion(true);
-    try {
-      const result = await confirmListingCompletion(activeListing.id);
-      if (!result.success) {
-        toast.error(result.errorMessage || 'Unable to confirm purchase completion right now.');
-        return;
-      }
-      toast.success('Purchase marked as completed. Reviews are now available.');
-    } finally {
-      setConfirmingCompletion(false);
-    }
   };
 
   useEffect(() => {
@@ -419,35 +387,6 @@ export default function MessagesPage() {
               {isTyping && <TypingIndicator />}
               <div ref={messagesEndRef} />
             </div>
-
-            {isPendingCompletionConversation && (
-              <div className="bg-white border-b border-[#EBEBEB] px-4 py-3 flex-shrink-0">
-                <div className="rounded-2xl border border-[#EBEBEB] bg-muted/70 p-4">
-                  <div className="flex items-start gap-2">
-                    <div className="rounded-full bg-primary/10 p-2 text-primary">
-                      <Package className="w-4 h-4" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-semibold text-foreground">Seller marked this item as sold to you. Did this sale complete?</p>
-                      <p className="text-xs text-muted-foreground mt-1">Confirm when the transaction is fully completed so both sides can leave a review.</p>
-                      {canBuyerConfirmCompletion ? (
-                        <button
-                          onClick={handleConfirmPurchaseCompleted}
-                          disabled={confirmingCompletion}
-                          className="mt-3 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-white px-3 py-1.5 text-sm font-semibold text-primary hover:bg-accent transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                        >
-                          {confirmingCompletion ? 'Confirming…' : 'Confirm Purchase Completed'}
-                        </button>
-                      ) : (
-                        <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-muted px-3 py-1.5 text-sm font-semibold text-muted-foreground">
-                          Waiting for buyer confirmation
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
 
             {isSaleConversation && (
               <div className="bg-white border-b border-[#EBEBEB] px-4 py-3 flex-shrink-0">
