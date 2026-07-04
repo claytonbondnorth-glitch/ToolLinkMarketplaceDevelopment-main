@@ -5,8 +5,62 @@ import { LISTINGS as MOCK_LISTINGS, CATEGORIES } from '../data/mockData';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-export type Page = 'home' | 'browse' | 'listing' | 'create' | 'profile' | 'seller' | 'messages' | 'admin' | 'auth';
+export type Page = 'home' | 'browse' | 'listing' | 'create' | 'profile' | 'seller' | 'messages' | 'admin' | 'auth' | 'about' | 'contact' | 'privacy' | 'terms' | 'help';
 export type AuthMode = 'login' | 'register' | 'forgot';
+
+const PAGE_TO_PATH: Record<Page, string> = {
+  home: '/',
+  browse: '/browse',
+  listing: '/listing',
+  create: '/create',
+  profile: '/profile',
+  seller: '/seller',
+  messages: '/messages',
+  admin: '/admin',
+  auth: '/auth',
+  about: '/about',
+  contact: '/contact',
+  privacy: '/privacy',
+  terms: '/terms',
+  help: '/help',
+};
+
+function pathToPage(pathname: string): Page {
+  const cleanPath = pathname.replace(/\/+$/, '') || '/';
+
+  switch (cleanPath) {
+    case '/':
+      return 'home';
+    case '/browse':
+      return 'browse';
+    case '/listing':
+      return 'listing';
+    case '/create':
+      return 'create';
+    case '/profile':
+      return 'profile';
+    case '/seller':
+      return 'seller';
+    case '/messages':
+      return 'messages';
+    case '/admin':
+      return 'admin';
+    case '/auth':
+      return 'auth';
+    case '/about':
+      return 'about';
+    case '/contact':
+      return 'contact';
+    case '/privacy':
+      return 'privacy';
+    case '/terms':
+      return 'terms';
+    case '/help':
+      return 'help';
+    default:
+      return 'home';
+  }
+}
 
 export interface AppUser {
   id: string;
@@ -430,10 +484,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  useEffect(() => {
+    const syncPageFromLocation = () => {
+      const mappedPage = pathToPage(window.location.pathname);
+      setCurrentPage(mappedPage);
+      setNavParams({});
+    };
+
+    syncPageFromLocation();
+    window.addEventListener('popstate', syncPageFromLocation);
+
+    return () => {
+      window.removeEventListener('popstate', syncPageFromLocation);
+    };
+  }, []);
+
   // ── Navigation ────────────────────────────────────────────────────────────────
   const navigate = useCallback((page: Page, params?: NavParams) => {
     setCurrentPage(page);
     setNavParams(params ?? {});
+
+    const nextPath = PAGE_TO_PATH[page] ?? '/';
+    if (window.location.pathname !== nextPath) {
+      window.history.pushState({}, '', nextPath);
+    }
+
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 

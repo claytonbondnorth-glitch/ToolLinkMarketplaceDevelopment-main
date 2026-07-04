@@ -5,6 +5,8 @@ import { CATEGORIES } from '../data/mockData';
 import DynamicStatCounter from '../components/DynamicStatCounter';
 import { getActiveListingsCount, getCitiesCoveredCount, getSalesThisMonthCount, getVerifiedTradesCount } from '../data/listingStats';
 import ListingCard from '../components/ListingCard';
+import UserAvatar from '../components/UserAvatar';
+import { supabase } from '../../lib/supabase';
 
 /* Animated counter hook */
 function useCounter(target: number, duration = 1800, start = false) {
@@ -46,14 +48,170 @@ function StatCounter({ value, label, suffix = '' }: { value: number; label: stri
 
 const SUGGESTIONS = ['Milwaukee M18', 'DeWalt circular saw', 'Makita drill', 'Hilti hammer', 'Festool track saw', 'Bosch angle grinder', 'Paslode nailer', 'scaffolding'];
 
+type TopSellerTestimonial = {
+  sellerName: string;
+  avatarUrl: string;
+  averageRating: number;
+  reviewCount: number;
+  locationLabel: string;
+  recentQuote: string;
+};
+
 export default function HomePage() {
   const { navigate, openAuth, currentUser, listings } = useApp();
   const [query, setQuery] = useState('');
   const [searchState, setSearchState] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [heroLoaded, setHeroLoaded] = useState(false);
+  const [topSellerTestimonial, setTopSellerTestimonial] = useState<TopSellerTestimonial | null>(null);
+  const [testimonialLoaded, setTestimonialLoaded] = useState(false);
 
   useEffect(() => { setTimeout(() => setHeroLoaded(true), 50); }, []);
+
+  useEffect(() => {
+    let isActive = true;
+
+    const loadTopSellerTestimonial = async () => {
+      setTestimonialLoaded(false);
+
+      const { data: reviewRows, error: reviewError } = await supabase
+        .from('reviews')
+        .select('reviewed_user_id, rating, comment, created_at')
+        .order('created_at', { ascending: false });
+
+      if (reviewError || !reviewRows) {
+        if (!isActive) return;
+        setTopSellerTestimonial(null);
+        setTestimonialLoaded(true);
+        return;
+      }
+
+      type SellerAggregate = {
+        reviewedUserId: string;
+        ratings: number[];
+        comments: { comment: string; createdAt: string }[];
+        latestReviewAt: string;
+      };
+
+      const grouped = new Map<string, SellerAggregate>();
+
+      for (const row of reviewRows) {
+        const reviewedUserId = row.reviewed_user_id;
+        const parsedRating = Number(row.rating);
+        if (!reviewedUserId || !Number.isFinite(parsedRating)) continue;
+
+        const createdAt = row.created_at ?? '';
+        const existing = grouped.get(reviewedUserId) ?? {
+          reviewedUserId,
+          ratings: [],
+          comments: [],
+          latestReviewAt: createdAt,
+        };
+
+        existing.ratings.push(parsedRating);
+        if (row.comment?.trim()) {
+          existing.comments.push({ comment: row.comment.trim(), createdAt });
+        }
+
+        if (!existing.latestReviewAt || createdAt > existing.latestReviewAt) {
+          existing.latestReviewAt = createdAt;
+        }
+
+        grouped.set(reviewedUserId, existing);
+      }
+
+      const ranked = Array.from(grouped.values())
+        .map((entry) => {
+          const reviewCount = entry.ratings.length;
+          const averageRating = reviewCount > 0
+            ? entry.ratings.reduce((sum, rating) => sum + rating, 0) / reviewCount
+            : 0;
+
+          const recentQuote = entry.comments
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]?.comment ?? '';
+
+          return {
+            reviewedUserId: entry.reviewedUserId,
+            averageRating,
+            reviewCount,
+            latestReviewAt: entry.latestReviewAt,
+            recentQuote,
+          };
+        })
+        .filter((entry) => entry.reviewCount > 0)
+        .sort((a, b) => {
+          if (b.averageRating !== a.averageRating) return b.averageRating - a.averageRating;
+          if (b.reviewCount !== a.reviewCount) return b.reviewCount - a.reviewCount;
+          return b.latestReviewAt.localeCompare(a.latestReviewAt);
+        });
+
+      if (ranked.length === 0) {
+        if (!isActive) return;
+        setTopSellerTestimonial(null);
+        setTestimonialLoaded(true);
+        return;
+      }
+
+      const candidateIds = ranked.map((entry) => entry.reviewedUserId);
+      const { data: profiles, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, name, avatar_url, location, state')
+        .in('id', candidateIds);
+
+      if (profileError || !profiles) {
+        if (!isActive) return;
+        setTopSellerTestimonial(null);
+        setTestimonialLoaded(true);
+        return;
+      }
+
+      const profilesById = new Map(profiles.map((profile) => [profile.id, profile]));
+
+      const selected = ranked.find((entry) => {
+        const profile = profilesById.get(entry.reviewedUserId);
+        return Boolean(profile?.name?.trim());
+      });
+
+      if (!selected) {
+        if (!isActive) return;
+        setTopSellerTestimonial(null);
+        setTestimonialLoaded(true);
+        return;
+      }
+
+      const profile = profilesById.get(selected.reviewedUserId);
+      if (!profile) {
+        if (!isActive) return;
+        setTopSellerTestimonial(null);
+        setTestimonialLoaded(true);
+        return;
+      }
+
+      const location = profile.location?.trim() ?? '';
+      const state = profile.state?.trim() ?? '';
+      const locationLabel = location
+        ? (state && !location.toLowerCase().includes(state.toLowerCase()) ? `${location}, ${state}` : location)
+        : state;
+
+      if (!isActive) return;
+
+      setTopSellerTestimonial({
+        sellerName: profile.name.trim(),
+        avatarUrl: profile.avatar_url ?? '',
+        averageRating: selected.averageRating,
+        reviewCount: selected.reviewCount,
+        locationLabel,
+        recentQuote: selected.recentQuote,
+      });
+      setTestimonialLoaded(true);
+    };
+
+    loadTopSellerTestimonial();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   const activeListings = listings.filter((l) => l.status === 'active');
   const activeListingCount = activeListings.length;
@@ -371,23 +529,43 @@ export default function HomePage() {
       {/* ─── TESTIMONIAL / CTA ─── */}
       <section className="py-20 md:py-24 bg-[#FFF0E6]">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 text-center">
-          <div className="flex items-center justify-center gap-0.5 mb-6">
-            {[...Array(5)].map((_, i) => <Star key={i} className="w-5 h-5 fill-primary text-primary" />)}
-          </div>
-          <blockquote className="text-2xl sm:text-3xl font-bold text-foreground mb-8 leading-snug">
-            &ldquo;Sold my old Milwaukee kit in 48 hours and used the cash to buy a new Hilti setup. Best thing I&apos;ve done for my business this year.&rdquo;
-          </blockquote>
-          <div className="flex items-center justify-center gap-3 mb-12">
-            <img
-              src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=80&h=80&fit=crop&auto=format"
-              alt="Jake Morrison"
-              className="w-12 h-12 rounded-full object-cover border-2 border-primary shadow-md"
-            />
-            <div className="text-left">
-              <p className="font-bold text-foreground text-sm">Jake Morrison</p>
-              <p className="text-xs text-muted-foreground">Licensed Electrician · Parramatta, NSW ⭐ 4.9</p>
-            </div>
-          </div>
+          {testimonialLoaded && topSellerTestimonial ? (
+            <>
+              <div className="flex items-center justify-center gap-0.5 mb-6" aria-label={`${topSellerTestimonial.averageRating.toFixed(1)} star rating`}>
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <Star
+                    key={star}
+                    className={`w-5 h-5 ${star <= Math.round(topSellerTestimonial.averageRating) ? 'fill-primary text-primary' : 'text-primary/30'}`}
+                  />
+                ))}
+              </div>
+
+              {topSellerTestimonial.recentQuote && (
+                <blockquote className="text-2xl sm:text-3xl font-bold text-foreground mb-8 leading-snug">
+                  &ldquo;{topSellerTestimonial.recentQuote}&rdquo;
+                </blockquote>
+              )}
+
+              <div className="flex items-center justify-center gap-3 mb-12">
+                <UserAvatar
+                  src={topSellerTestimonial.avatarUrl || undefined}
+                  name={topSellerTestimonial.sellerName}
+                  alt={topSellerTestimonial.sellerName}
+                  className="w-12 h-12 rounded-full object-cover border-2 border-primary shadow-md"
+                />
+                <div className="text-left">
+                  <p className="font-bold text-foreground text-sm">{topSellerTestimonial.sellerName}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {topSellerTestimonial.locationLabel ? `${topSellerTestimonial.locationLabel} · ` : ''}
+                    ⭐ {topSellerTestimonial.averageRating.toFixed(1)} ({topSellerTestimonial.reviewCount} review{topSellerTestimonial.reviewCount === 1 ? '' : 's'})
+                  </p>
+                </div>
+              </div>
+            </>
+          ) : testimonialLoaded ? (
+            <p className="text-base sm:text-lg text-muted-foreground mb-12">Real seller reviews will appear here soon.</p>
+          ) : null}
+
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <button
               onClick={() => currentUser ? navigate('create') : openAuth('register')}

@@ -88,11 +88,20 @@ export default function Footer() {
           <div>
             <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-300 mb-4">Company</h4>
             <ul className="space-y-3">
-              {['About Us', 'Contact', 'Privacy Policy', 'Terms of Use', 'Help Centre'].map((item) => (
-                <li key={item}>
-                  <a href="#" className="text-sm text-gray-400 hover:text-primary transition-colors">
-                    {item}
-                  </a>
+              {[
+                ['About Us', () => navigate('about')],
+                ['Contact', () => navigate('contact')],
+                ['Privacy Policy', () => navigate('privacy')],
+                ['Terms of Use', () => navigate('terms')],
+                ['Help Centre', () => navigate('help')],
+              ].map(([label, action]) => (
+                <li key={label as string}>
+                  <button
+                    onClick={action as () => void}
+                    className="text-sm text-gray-400 hover:text-primary transition-colors"
+                  >
+                    {label as string}
+                  </button>
                 </li>
               ))}
             </ul>

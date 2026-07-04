@@ -12,6 +12,11 @@ import ProfilePage from './pages/ProfilePage';
 import SellerProfilePage from './pages/SellerProfilePage';
 import MessagesPage from './pages/MessagesPage';
 import AdminDashboard from './pages/AdminDashboard';
+import AboutPage from './pages/AboutPage';
+import ContactPage from './pages/ContactPage';
+import PrivacyPage from './pages/PrivacyPage';
+import TermsPage from './pages/TermsPage';
+import HelpPage from './pages/HelpPage';
 
 function SchemaErrorBanner() {
   const { schemaError } = useApp();
@@ -70,6 +75,11 @@ function AppContent() {
             {currentPage === 'seller'  && <SellerProfilePage />}
             {currentPage === 'messages'&& <MessagesPage />}
             {currentPage === 'admin'   && <AdminDashboard />}
+            {currentPage === 'about'   && <AboutPage />}
+            {currentPage === 'contact' && <ContactPage />}
+            {currentPage === 'privacy' && <PrivacyPage />}
+            {currentPage === 'terms'   && <TermsPage />}
+            {currentPage === 'help'    && <HelpPage />}
             {/* Auth is a real page route — no modal, no fixed overlay */}
             {currentPage === 'auth'    && <AuthPage />}
           </>
