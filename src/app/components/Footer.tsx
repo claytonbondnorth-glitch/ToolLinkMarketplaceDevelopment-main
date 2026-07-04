@@ -1,4 +1,4 @@
-import { Wrench, Facebook, Instagram, Linkedin, Twitter } from 'lucide-react';
+import { Wrench } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 export default function Footer() {
@@ -26,17 +26,6 @@ export default function Footer() {
             <p className="text-sm text-gray-400 max-w-xs leading-relaxed">
               Australia&apos;s dedicated marketplace for tradies. Buy, sell and trade professional tools and construction equipment nationwide.
             </p>
-            <div className="flex items-center gap-3 mt-6">
-              {[Facebook, Instagram, Twitter, Linkedin].map((Icon, i) => (
-                <a
-                  key={i}
-                  href="#"
-                  className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center hover:bg-primary transition-colors"
-                >
-                  <Icon className="w-4 h-4" />
-                </a>
-              ))}
-            </div>
           </div>
 
           {/* Buy */}
@@ -68,9 +57,9 @@ export default function Footer() {
             <ul className="space-y-3">
               {[
                 ['Create a Listing', () => navigate('create')],
-                ['Seller Guide', () => {}],
-                ['Pricing', () => {}],
-                ['Shipping Tips', () => {}],
+                ['Seller Guide', () => navigate('sellerGuide')],
+                ['Pricing', () => navigate('pricing')],
+                ['Shipping Tips', () => navigate('shippingTips')],
               ].map(([label, action]) => (
                 <li key={label as string}>
                   <button

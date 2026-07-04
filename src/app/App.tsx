@@ -17,6 +17,9 @@ import ContactPage from './pages/ContactPage';
 import PrivacyPage from './pages/PrivacyPage';
 import TermsPage from './pages/TermsPage';
 import HelpPage from './pages/HelpPage';
+import SellerGuidePage from './pages/SellerGuidePage';
+import PricingPage from './pages/PricingPage';
+import ShippingTipsPage from './pages/ShippingTipsPage';
 
 function SchemaErrorBanner() {
   const { schemaError } = useApp();
@@ -80,6 +83,9 @@ function AppContent() {
             {currentPage === 'privacy' && <PrivacyPage />}
             {currentPage === 'terms'   && <TermsPage />}
             {currentPage === 'help'    && <HelpPage />}
+            {currentPage === 'sellerGuide' && <SellerGuidePage />}
+            {currentPage === 'pricing' && <PricingPage />}
+            {currentPage === 'shippingTips' && <ShippingTipsPage />}
             {/* Auth is a real page route — no modal, no fixed overlay */}
             {currentPage === 'auth'    && <AuthPage />}
           </>

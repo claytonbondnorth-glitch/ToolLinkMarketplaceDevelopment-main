@@ -5,7 +5,7 @@ import { LISTINGS as MOCK_LISTINGS, CATEGORIES } from '../data/mockData';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-export type Page = 'home' | 'browse' | 'listing' | 'create' | 'profile' | 'seller' | 'messages' | 'admin' | 'auth' | 'about' | 'contact' | 'privacy' | 'terms' | 'help';
+export type Page = 'home' | 'browse' | 'listing' | 'create' | 'profile' | 'seller' | 'messages' | 'admin' | 'auth' | 'about' | 'contact' | 'privacy' | 'terms' | 'help' | 'sellerGuide' | 'pricing' | 'shippingTips';
 export type AuthMode = 'login' | 'register' | 'forgot';
 
 const PAGE_TO_PATH: Record<Page, string> = {
@@ -23,6 +23,9 @@ const PAGE_TO_PATH: Record<Page, string> = {
   privacy: '/privacy',
   terms: '/terms',
   help: '/help',
+  sellerGuide: '/seller-guide',
+  pricing: '/pricing',
+  shippingTips: '/shipping-tips',
 };
 
 function pathToPage(pathname: string): Page {
@@ -57,6 +60,12 @@ function pathToPage(pathname: string): Page {
       return 'terms';
     case '/help':
       return 'help';
+    case '/seller-guide':
+      return 'sellerGuide';
+    case '/pricing':
+      return 'pricing';
+    case '/shipping-tips':
+      return 'shippingTips';
     default:
       return 'home';
   }
