@@ -27,6 +27,7 @@ export default function ProfilePage() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [submittingVerification, setSubmittingVerification] = useState(false);
   const [showVerificationSuccessScreen, setShowVerificationSuccessScreen] = useState(false);
+  const [showVerificationForm, setShowVerificationForm] = useState(false);
   const [latestVerificationStatus, setLatestVerificationStatus] = useState<VerificationApplicationStatus>(null);
   const [editingListing, setEditingListing] = useState<AppListing | null>(null);
   const [savingListingEdit, setSavingListingEdit] = useState(false);
@@ -82,17 +83,13 @@ export default function ProfilePage() {
   const formattedRating = profileStats.averageRating.toFixed(1);
   const verificationBadgeLabel = getVerificationBadgeLabel(currentUser);
 
-  const verificationStatusDisplay = verificationBadgeLabel
-    ? verificationBadgeLabel === 'Verified Business'
-      ? '🔵 Verified Business'
-      : verificationBadgeLabel === 'Verified Tradie'
-        ? '🟢 Verified Tradie'
-        : '🟢 Verified Member'
-    : latestVerificationStatus === 'pending'
-      ? '🟡 Pending Review'
-      : latestVerificationStatus === 'rejected'
-        ? '🔴 Rejected'
-        : 'Unverified';
+  const verificationStatusDisplay = verificationBadgeLabel === 'Verified Tradie'
+    ? '🟢 Verified Tradie'
+    : verificationBadgeLabel === 'Verified Business'
+      ? '🟢 Verified Business'
+      : '⚪ Not Verified';
+  const isVerifiedMember = Boolean(verificationBadgeLabel);
+  const isVerificationPending = latestVerificationStatus === 'pending' || showVerificationSuccessScreen;
 
   const loadLatestVerificationApplication = useCallback(async (userId: string) => {
     const { data, error } = await supabase
@@ -195,6 +192,12 @@ export default function ProfilePage() {
       supabase.removeChannel(channel);
     };
   }, [currentUser?.id, loadLatestVerificationApplication, refreshUserProfiles]);
+
+  useEffect(() => {
+    if (verificationBadgeLabel || latestVerificationStatus === 'pending') {
+      setShowVerificationForm(false);
+    }
+  }, [verificationBadgeLabel, latestVerificationStatus]);
 
   const setEdit = (field: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     setEditForm((prev) => ({ ...prev, [field]: e.target.value }));
@@ -375,6 +378,7 @@ export default function ProfilePage() {
 
       setLatestVerificationStatus('pending');
       setShowVerificationSuccessScreen(true);
+      setShowVerificationForm(false);
       setVerificationDocument(null);
       setVerificationForm((prev) => ({ ...prev, website: '', notes: '' }));
     } catch (error: any) {
@@ -382,6 +386,14 @@ export default function ProfilePage() {
     } finally {
       setSubmittingVerification(false);
     }
+  };
+
+  const handleApplyForVerificationFromProfile = () => {
+    setTab('settings');
+    setShowVerificationForm(true);
+    setTimeout(() => {
+      verificationStatusCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 0);
   };
 
   return (
@@ -459,6 +471,34 @@ export default function ProfilePage() {
               <p className="text-lg font-bold text-primary">{profileStats.reviewCount}</p>
               <p className="text-xs text-gray-400">Reviews</p>
             </div>
+          </div>
+
+          <div className="mt-4 mb-2 bg-white/10 border border-white/15 rounded-xl p-4">
+            {isVerifiedMember ? (
+              <div>
+                <p className="text-sm font-semibold text-green-300">Verified Member</p>
+                <p className="text-sm text-gray-300 mt-1">Your account has been verified.</p>
+              </div>
+            ) : isVerificationPending ? (
+              <div>
+                <p className="text-sm font-semibold text-amber-300">Verification Pending</p>
+                <p className="text-sm text-gray-300 mt-1">We&apos;re reviewing your application.</p>
+              </div>
+            ) : (
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-white">Become a Verified Tradie or Business</p>
+                  <p className="text-sm text-gray-300 mt-1">Verify your trade or business to build trust with buyers and sellers. Verified members receive a badge on their profile and listings.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleApplyForVerificationFromProfile}
+                  className="px-4 py-2 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-orange-600 transition-colors w-full sm:w-auto"
+                >
+                  Apply for Verification
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Tabs */}
@@ -620,46 +660,36 @@ export default function ProfilePage() {
             </div>
 
             <div className="bg-white rounded-xl border border-border p-6">
-              <h3 className="font-bold text-foreground mb-1">Get Verified</h3>
-              <p className="text-sm text-muted-foreground mb-4">Apply for Verified Tradie or Verified Business status.</p>
+              <h3 className="font-bold text-foreground mb-1">Become Verified</h3>
+              <p className="text-sm text-muted-foreground mb-4">Build trust and improve confidence on your profile and listings.</p>
 
-              {showVerificationSuccessScreen ? (
-                <div className="rounded-xl border border-border bg-muted/40 p-5">
-                  <h4 className="text-base font-bold text-foreground mb-2">✅ Verification Application Submitted</h4>
-                  <div className="text-sm text-muted-foreground space-y-1.5">
-                    <p>Thank you for applying for verification.</p>
-                    <p>Your application has been successfully received by ToolLink.</p>
-                    <p>Our team will review your application and supporting documents.</p>
-                    <p>You will receive a message from ToolLink once your application has been approved or if we require additional information.</p>
-                  </div>
-                  <div className="mt-4 rounded-xl border border-border bg-white px-4 py-3">
-                    <p className="text-xs text-muted-foreground mb-1">Current Status:</p>
-                    <p className="text-sm font-semibold text-foreground">🟡 Pending Review</p>
-                  </div>
-                  <div className="mt-4 flex flex-col sm:flex-row gap-2.5">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowVerificationSuccessScreen(false);
-                        verificationStatusCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                      }}
-                      className="px-4 py-2.5 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-orange-600 transition-colors"
-                    >
-                      View Application Status
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowVerificationSuccessScreen(false);
-                        setTab('listings');
-                      }}
-                      className="px-4 py-2.5 border border-border text-foreground text-sm font-semibold rounded-xl hover:border-primary transition-colors"
-                    >
-                      Return to Profile
-                    </button>
-                  </div>
+              {verificationBadgeLabel ? (
+                <div className="rounded-xl border border-green-200 bg-green-50 p-5">
+                  <p className="text-sm font-semibold text-green-900 mb-1">{verificationStatusDisplay}</p>
+                  <p className="text-sm text-green-800">Your account has been successfully verified.</p>
+                </div>
+              ) : latestVerificationStatus === 'pending' || showVerificationSuccessScreen ? (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-5">
+                  <h4 className="text-base font-bold text-amber-900 mb-1">Verification Pending</h4>
+                  <p className="text-sm text-amber-800">We&apos;re currently reviewing your application. We&apos;ll notify you once it&apos;s been approved.</p>
                 </div>
               ) : (
+                <>
+                  <div className="rounded-xl border border-border bg-muted/40 p-5 mb-4">
+                    <h4 className="text-base font-bold text-foreground mb-2">Become a Verified Member</h4>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      Build trust with buyers and sellers by verifying your trade or business. Verified members receive a verification badge on their profile and listings, helping increase confidence and improve marketplace credibility.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setShowVerificationForm((prev) => !prev)}
+                      className="mt-4 px-4 py-2.5 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-orange-600 transition-colors"
+                    >
+                      Apply for Verification
+                    </button>
+                  </div>
+
+                  {showVerificationForm && (
                 <form onSubmit={handleSubmitVerification} className="space-y-3">
                   <div>
                     <label className="block text-xs font-semibold text-foreground mb-1.5">Verification type</label>
@@ -728,6 +758,8 @@ export default function ProfilePage() {
                     {submittingVerification ? 'Submitting...' : 'Submit Verification'}
                   </button>
                 </form>
+                  )}
+                </>
               )}
             </div>
 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Wrench, Eye, EyeOff, ArrowLeft, CheckCircle, Loader2, Mail, ArrowRight } from 'lucide-react';
+import { Wrench, Eye, EyeOff, ArrowLeft, CheckCircle, Loader2, Mail, ArrowRight, Info } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { supabase } from '../../lib/supabase';
 
@@ -158,6 +158,23 @@ export default function AuthPage() {
                   We&apos;ve sent a verification link to your email address. Please verify your email before signing in.
                 </p>
                 <p className="text-sm font-semibold text-foreground mb-6">{form.email}</p>
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl text-left mb-5">
+                  <div className="flex items-start gap-2.5">
+                    <Info className="w-4 h-4 text-blue-700 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <h3 className="text-sm font-bold text-blue-900 mb-1">📧 Check your email</h3>
+                      <p className="text-sm text-blue-800 leading-relaxed">
+                        We&apos;ve sent a verification email to your inbox.
+                      </p>
+                      <p className="text-sm text-blue-800 leading-relaxed mt-2">
+                        If you don&apos;t see it within a few minutes, please check your Junk or Spam folder. Email providers sometimes filter new verification emails there.
+                      </p>
+                      <p className="text-sm text-blue-800 leading-relaxed mt-2">
+                        Once you&apos;ve verified your email, return to ToolLink and sign in.
+                      </p>
+                    </div>
+                  </div>
+                </div>
                 {error && (
                   <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 leading-relaxed mb-3 text-left">
                     {error}

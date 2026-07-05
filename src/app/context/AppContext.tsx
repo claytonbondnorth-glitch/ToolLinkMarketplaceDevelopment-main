@@ -1,8 +1,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
 import { toast } from 'sonner';
 import { supabase, EDGE_URL } from '../../lib/supabase';
-import { LISTINGS as MOCK_LISTINGS, CATEGORIES } from '../data/mockData';
-import { BROWSE_QA_SEED_STORAGE_KEY, mergeListingsWithQaSeed } from '../data/browseQaSeedListings';
+import { CATEGORIES } from '../data/mockData';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -162,10 +161,6 @@ interface AppContextValue {
 
   listings: AppListing[];
   listingsLoading: boolean;
-  browseQaSeedEnabled: boolean;
-  enableBrowseQaSeed: () => void;
-  disableBrowseQaSeed: () => void;
-  refreshListings: () => Promise<void>;
   savedIds: Set<string>;
   toggleSave: (listingId: string) => Promise<void>;
   addListing: (listing: Omit<AppListing, 'id' | 'dateListed' | 'views' | 'reportCount' | 'status'>) => Promise<string | null>;
@@ -252,7 +247,6 @@ function rowToListing(row: any): AppListing {
 const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const isLocalDev = import.meta.env.DEV;
   const EMAIL_VERIFICATION_REQUIRED_MESSAGE = 'Please verify your email before signing in. Check your inbox for the verification link.';
   const [currentPage, setCurrentPage] = useState<Page>('home');
   const [navParams, setNavParams] = useState<NavParams>({});
@@ -265,14 +259,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const [listings, setListings] = useState<AppListing[]>([]);
   const [listingsLoading, setListingsLoading] = useState(true);
-  const [browseQaSeedEnabled, setBrowseQaSeedEnabled] = useState(false);
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
-  useEffect(() => {
-    if (!isLocalDev) return;
-
-    const storedSeedState = window.localStorage.getItem(BROWSE_QA_SEED_STORAGE_KEY);
-    setBrowseQaSeedEnabled(storedSeedState === 'true');
-  }, [isLocalDev]);
 
 
   const [conversations, setConversations] = useState<AppConversation[]>([]);
@@ -390,22 +377,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       .select('*')
       .order('created_at', { ascending: false });
 
-    let sourceListings: AppListing[];
-
     if (data && !error) {
-      sourceListings = data.map(rowToListing);
+      setListings(data.map(rowToListing));
     } else {
-      // Fall back to mock data if schema isn't ready
-      sourceListings = MOCK_LISTINGS.map((l) => ({ ...l, sellerId: l.sellerId }));
+      setListings([]);
     }
-
-    const nextListings = isLocalDev
-      ? mergeListingsWithQaSeed(sourceListings, browseQaSeedEnabled)
-      : sourceListings;
-
-    setListings(nextListings);
     setListingsLoading(false);
-  }, [browseQaSeedEnabled, isLocalDev]);
+  }, []);
 
   useEffect(() => {
     if (!schemaReady) return;
@@ -439,18 +417,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // Ignore refresh failures; the seller profile can still render with the last known values.
     }
   }, [currentUser?.id]);
-
-  const enableBrowseQaSeed = useCallback(() => {
-    if (!isLocalDev) return;
-    window.localStorage.setItem(BROWSE_QA_SEED_STORAGE_KEY, 'true');
-    setBrowseQaSeedEnabled(true);
-  }, [isLocalDev]);
-
-  const disableBrowseQaSeed = useCallback(() => {
-    if (!isLocalDev) return;
-    window.localStorage.removeItem(BROWSE_QA_SEED_STORAGE_KEY);
-    setBrowseQaSeedEnabled(false);
-  }, [isLocalDev]);
 
   // ── Fetch users (for admin / seller profiles) ─────────────────────────────────
   useEffect(() => {
@@ -1098,7 +1064,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       currentPage, navParams, navigate,
       currentUser, authLoading, login, register, logout, updateProfile,
       showAuth, authMode, openAuth, closeAuth,
-      listings, listingsLoading, browseQaSeedEnabled, enableBrowseQaSeed, disableBrowseQaSeed, refreshListings: fetchListings, savedIds, toggleSave, addListing, updateListing, deleteListing,
+      listings, listingsLoading, savedIds, toggleSave, addListing, updateListing, deleteListing,
       conversations, sendMessage, startConversation, markConversationAsRead, unreadCount,
       users, refreshUserProfiles, updateListingStatus, deleteListingAdmin, deleteUserAdmin,
       schemaReady, schemaError,

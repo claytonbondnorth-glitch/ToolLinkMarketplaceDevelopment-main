@@ -244,7 +244,7 @@ export const LISTINGS: Listing[] = [
     categoryId: 'power-tools',
     location: 'Parramatta, NSW',
     state: 'NSW',
-    description: 'Selling my Milwaukee M18 FUEL 6-piece combo kit — purchased 18 months ago and barely used. Includes: M18 FUEL 13mm Drill/Driver, M18 FUEL ¼" Hex Impact Driver, M18 FUEL Circular Saw, M18 FUEL Angle Grinder, M18 FUEL Recip Saw, and M18 FUEL LED light tower. Comes with 2x 5.0Ah batteries, dual port charger, and heavy-duty bag. All tools in excellent condition with no damage. Receipts available. Happy to demo locally.',
+    description: 'Selling my Milwaukee M18 FUEL 6-piece combo kit — purchased 18 months ago and barely used. Includes: M18 FUEL 13mm Drill/Driver, M18 FUEL ¼" Hex Impact Driver, M18 FUEL Circular Saw, M18 FUEL Angle Grinder, M18 FUEL Recip Saw, and M18 FUEL LED light tower. Comes with 2x 5.0Ah batteries, dual port charger, and heavy-duty bag. All tools in excellent condition with no damage. Receipts available. Inspection available for serious buyers.',
     images: [
       'https://images.unsplash.com/photo-1504148455328-c376907d081c?w=800&h=600&fit=crop&auto=format',
       'https://images.unsplash.com/photo-1572981779307-38b8cabb2407?w=800&h=600&fit=crop&auto=format',

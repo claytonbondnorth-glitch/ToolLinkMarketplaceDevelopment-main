@@ -83,7 +83,6 @@ export default function AdminDashboard() {
 
   const activeListings = listings.filter((l) => l.status === 'active');
   const soldListings = listings.filter((l) => l.status === 'sold');
-  const flaggedListings = listings.filter((l) => l.reportCount > 0 || l.status === 'flagged');
 
   const categoryListingCounts = listings.reduce<Record<string, number>>((acc, listing) => {
     const key = listing.categoryId || listing.category;
@@ -339,7 +338,7 @@ export default function AdminDashboard() {
     { id: 'analytics', label: 'Analytics', icon: BarChart2 },
     { id: 'users', label: 'Users', icon: Users, count: users.length },
     { id: 'listings', label: 'Listings', icon: Package, count: listings.length },
-    { id: 'reported', label: 'Reported', icon: Flag, count: flaggedListings.length },
+    { id: 'reported', label: 'Reported', icon: Flag, count: 0 },
     { id: 'verification', label: 'Verification', icon: CheckCircle, count: dashboardStats.pendingVerificationApplications },
     { id: 'categories', label: 'Categories', icon: Tag },
   ];
@@ -605,40 +604,18 @@ export default function AdminDashboard() {
             <div className="bg-white rounded-xl border border-border p-6">
               <h3 className="font-bold text-foreground mb-5 flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-orange-500" />
-                Reported Listings ({flaggedListings.length})
+                Reported Listings
               </h3>
-              {flaggedListings.length === 0 ? (
-                <div className="text-center py-10">
-                  <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3" />
-                  <p className="font-medium text-foreground">All clear — no reported listings</p>
-                  <p className="text-sm text-muted-foreground mt-1">The community is well-behaved today.</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {flaggedListings.map((listing) => {
-                    const seller = users.find((u) => u.id === listing.sellerId);
-                    return (
-                      <div key={listing.id} className="flex items-start gap-4 p-4 bg-red-50 border border-red-200 rounded-xl">
-                        <img src={listing.images[0]} alt={listing.title} className="w-16 h-14 rounded-xl object-cover flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-foreground line-clamp-1">{listing.title}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            By {seller?.name} · ${listing.price.toLocaleString()} · {listing.reportCount} report{listing.reportCount !== 1 ? 's' : ''}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          <button onClick={() => updateListingStatus(listing.id, 'active')} className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 transition-colors">
-                            <CheckCircle className="w-3.5 h-3.5" /> Approve
-                          </button>
-                          <button onClick={() => deleteListingAdmin(listing.id)} className="flex items-center gap-1.5 px-3 py-1.5 bg-destructive text-white text-xs font-semibold rounded-lg hover:bg-red-700 transition-colors">
-                            <XCircle className="w-3.5 h-3.5" /> Remove
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+              <div className="rounded-xl border border-border bg-muted/40 px-4 py-5">
+                <p className="font-medium text-foreground">Listing reports are currently handled by email.</p>
+                <p className="text-sm text-muted-foreground mt-1">Reports sent through the website are directed to support@toollinkk.com. A full in-app reporting dashboard will be added later.</p>
+                <a
+                  href="mailto:support@toollinkk.com"
+                  className="inline-flex items-center mt-4 px-4 py-2 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-orange-600 transition-colors"
+                >
+                  Open Support Email
+                </a>
+              </div>
             </div>
           </div>
         )}

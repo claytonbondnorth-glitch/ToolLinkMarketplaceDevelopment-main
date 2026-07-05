@@ -91,9 +91,7 @@ export default function MessagesPage() {
     activeConv.participantIds.includes(activeListing.soldToUserId)
   );
   const isBuyerReview = Boolean(currentUser && activeListing && currentUser.id === activeListing.soldToUserId && currentUser.id !== activeListing.sellerId);
-  const reviewTargetUser = isBuyerReview
-    ? users.find((u) => u.id === activeListing?.sellerId)
-    : users.find((u) => u.id === activeListing?.soldToUserId);
+  const reviewTargetUser = isBuyerReview ? users.find((u) => u.id === activeListing?.sellerId) : null;
 
   const handleSend = () => {
     if (!input.trim() || !activeConvId) return;
@@ -116,7 +114,7 @@ export default function MessagesPage() {
   }, [activeConvId]);
 
   useEffect(() => {
-    if (!currentUser || !activeListing?.id || activeListing.status !== 'sold' || !activeListing.soldToUserId) {
+    if (!currentUser || !activeListing?.id || activeListing.status !== 'sold' || !activeListing.soldToUserId || !isBuyerReview) {
       setHasReviewedCurrentListing(null);
       return;
     }
@@ -143,10 +141,10 @@ export default function MessagesPage() {
     return () => {
       isActive = false;
     };
-  }, [currentUser?.id, activeListing?.id, activeListing?.status, activeListing?.soldToUserId]);
+  }, [currentUser?.id, activeListing?.id, activeListing?.status, activeListing?.soldToUserId, isBuyerReview]);
 
   const handleSubmitReview = async () => {
-    if (!currentUser || !activeListing || !reviewTargetUser) return;
+    if (!currentUser || !activeListing || !reviewTargetUser || !isBuyerReview) return;
 
     if (reviewRating < 1 || reviewRating > 5) {
       toast.error('Please choose a rating from 1 to 5 stars.');
@@ -378,53 +376,55 @@ export default function MessagesPage() {
                     <div className="flex-1">
                       <p className="text-sm font-semibold text-foreground">This item has been marked as sold.</p>
                       <p className="text-xs text-muted-foreground mt-1">Thanks for completing the transaction.</p>
-                      {hasReviewedCurrentListing === true ? (
-                        <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-green-50 px-3 py-1.5 text-sm font-semibold text-green-700">
-                          <CheckCircle2 className="w-4 h-4" />
-                          Review submitted
-                        </div>
-                      ) : hasReviewedCurrentListing === null ? (
-                        <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-muted px-3 py-1.5 text-sm font-semibold text-muted-foreground">
-                          Checking review status...
-                        </div>
-                      ) : reviewOpen ? (
-                        <div className="mt-3 space-y-3">
-                          <div>
-                            <p className="text-sm font-semibold text-foreground mb-2">Your rating</p>
-                            <div className="flex items-center gap-1.5">
-                              {[1, 2, 3, 4, 5].map((star) => (
-                                <button key={star} onClick={() => setReviewRating(star)} className="p-1">
-                                  <Star className={`w-5 h-5 ${star <= reviewRating ? 'fill-primary text-primary' : 'text-border'}`} />
-                                </button>
-                              ))}
+                      {isBuyerReview && (
+                        hasReviewedCurrentListing === true ? (
+                          <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-green-50 px-3 py-1.5 text-sm font-semibold text-green-700">
+                            <CheckCircle2 className="w-4 h-4" />
+                            Review submitted
+                          </div>
+                        ) : hasReviewedCurrentListing === null ? (
+                          <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-muted px-3 py-1.5 text-sm font-semibold text-muted-foreground">
+                            Checking review status...
+                          </div>
+                        ) : reviewOpen ? (
+                          <div className="mt-3 space-y-3">
+                            <div>
+                              <p className="text-sm font-semibold text-foreground mb-2">Your rating</p>
+                              <div className="flex items-center gap-1.5">
+                                {[1, 2, 3, 4, 5].map((star) => (
+                                  <button key={star} onClick={() => setReviewRating(star)} className="p-1">
+                                    <Star className={`w-5 h-5 ${star <= reviewRating ? 'fill-primary text-primary' : 'text-border'}`} />
+                                  </button>
+                                ))}
+                              </div>
                             </div>
+                            <div>
+                              <label className="text-sm font-semibold text-foreground mb-2 block">Comment (optional)</label>
+                              <textarea
+                                value={reviewComment}
+                                onChange={(e) => setReviewComment(e.target.value)}
+                                rows={3}
+                                className="w-full px-3 py-2.5 rounded-xl border border-[#EBEBEB] bg-white text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                                placeholder={`Tell us about your experience with ${reviewTargetUser?.name ?? 'the seller'}`}
+                              />
+                            </div>
+                            <button
+                              onClick={handleSubmitReview}
+                              disabled={reviewSubmitting}
+                              className="w-full py-2.5 bg-primary text-white font-semibold rounded-xl hover:bg-orange-600 transition-colors text-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                            >
+                              {reviewSubmitting ? 'Saving…' : 'Leave Review for Seller'}
+                            </button>
                           </div>
-                          <div>
-                            <label className="text-sm font-semibold text-foreground mb-2 block">Comment (optional)</label>
-                            <textarea
-                              value={reviewComment}
-                              onChange={(e) => setReviewComment(e.target.value)}
-                              rows={3}
-                              className="w-full px-3 py-2.5 rounded-xl border border-[#EBEBEB] bg-white text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-                              placeholder={`Tell us about your experience with ${reviewTargetUser?.name ?? 'this transaction'}`}
-                            />
-                          </div>
+                        ) : (
                           <button
-                            onClick={handleSubmitReview}
-                            disabled={reviewSubmitting}
-                            className="w-full py-2.5 bg-primary text-white font-semibold rounded-xl hover:bg-orange-600 transition-colors text-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                            onClick={() => setReviewOpen(true)}
+                            className="mt-3 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-white px-3 py-1.5 text-sm font-semibold text-primary hover:bg-accent transition-colors"
                           >
-                            {reviewSubmitting ? 'Saving…' : `Leave Review for ${isBuyerReview ? 'Seller' : 'Buyer'}`}
+                            <Star className="w-4 h-4 fill-current" />
+                            Leave Review for Seller
                           </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => setReviewOpen(true)}
-                          className="mt-3 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-white px-3 py-1.5 text-sm font-semibold text-primary hover:bg-accent transition-colors"
-                        >
-                          <Star className="w-4 h-4 fill-current" />
-                          {isBuyerReview ? 'Leave Review for Seller' : 'Leave Review for Buyer'}
-                        </button>
+                        )
                       )}
                     </div>
                   </div>

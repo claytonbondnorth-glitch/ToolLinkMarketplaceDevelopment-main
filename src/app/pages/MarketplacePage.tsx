@@ -73,13 +73,9 @@ export default function MarketplacePage() {
     navigate,
     currentUser,
     openAuth,
-    browseQaSeedEnabled,
-    enableBrowseQaSeed,
-    disableBrowseQaSeed,
   } = useApp();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const isLocalDev = import.meta.env.DEV;
   const [filters, setFilters] = useState<Filters>({
     query: '',
     categoryId: navParams.categoryId ?? '',
@@ -268,14 +264,6 @@ export default function MarketplacePage() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleEnableQaSeed = () => {
-    enableBrowseQaSeed();
-  };
-
-  const handleDisableQaSeed = () => {
-    disableBrowseQaSeed();
-  };
-
   const renderFilterPanel = () => {
     return (
       <div className="space-y-6">
@@ -363,30 +351,6 @@ export default function MarketplacePage() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
-        {isLocalDev && (
-          <div className="mb-4 bg-white rounded-xl border border-border px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-foreground">Local QA Seed Listings</p>
-              <p className="text-xs text-muted-foreground">Temporary [TEST] listings for Browse QA. Local development only.</p>
-            </div>
-            {browseQaSeedEnabled ? (
-              <button
-                onClick={handleDisableQaSeed}
-                className="px-4 py-2 text-sm font-semibold rounded-xl border border-border text-foreground hover:bg-muted transition-colors"
-              >
-                Remove QA Seed Listings
-              </button>
-            ) : (
-              <button
-                onClick={handleEnableQaSeed}
-                className="px-4 py-2 text-sm font-semibold rounded-xl bg-primary text-white hover:bg-orange-600 transition-colors"
-              >
-                Seed QA Listings
-              </button>
-            )}
-          </div>
-        )}
-
         <div className="flex gap-6">
           <aside className="hidden lg:block w-64 flex-shrink-0">
             <div className="bg-white rounded-xl border border-border p-5 sticky top-24">
