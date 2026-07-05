@@ -142,10 +142,14 @@ interface NavParams {
   categoryId?: string;
 }
 
+interface NavigateOptions {
+  preserveScroll?: boolean;
+}
+
 interface AppContextValue {
   currentPage: Page;
   navParams: NavParams;
-  navigate: (page: Page, params?: NavParams) => void;
+  navigate: (page: Page, params?: NavParams, options?: NavigateOptions) => void;
 
   currentUser: AppUser | null;
   authLoading: boolean;
@@ -509,7 +513,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // ── Navigation ────────────────────────────────────────────────────────────────
-  const navigate = useCallback((page: Page, params?: NavParams) => {
+  const navigate = useCallback((page: Page, params?: NavParams, options?: NavigateOptions) => {
     setCurrentPage(page);
     setNavParams(params ?? {});
 
@@ -518,7 +522,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       window.history.pushState({}, '', nextPath);
     }
 
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (!options?.preserveScroll) {
+      window.scrollTo({ top: 0, behavior: 'auto' });
+    }
   }, []);
 
   // ── Auth ──────────────────────────────────────────────────────────────────────
@@ -605,14 +611,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setAuthMode(mode);
     setCurrentPage('auth');
     setNavParams({});
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, behavior: 'auto' });
   }, []);
 
   // Go back home from the auth page
   const closeAuth = useCallback(() => {
     setCurrentPage('home');
     setNavParams({});
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, behavior: 'auto' });
   }, []);
 
   // ── Listings ──────────────────────────────────────────────────────────────────
