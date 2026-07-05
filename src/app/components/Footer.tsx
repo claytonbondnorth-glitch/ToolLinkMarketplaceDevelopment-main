@@ -4,8 +4,6 @@ import { useApp } from '../context/AppContext';
 export default function Footer() {
   const { navigate } = useApp();
 
-  const year = new Date().getFullYear();
-
   return (
     <footer className="bg-[#111111] text-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-14">
@@ -24,7 +22,7 @@ export default function Footer() {
               </span>
             </button>
             <p className="text-sm text-gray-400 max-w-xs leading-relaxed">
-              Australia&apos;s dedicated marketplace for tradies. Buy, sell and trade professional tools and construction equipment nationwide.
+              Australia&apos;s trusted marketplace for tradies to buy, sell and discover quality professional tools and construction equipment. Built for the industry, by people who understand it.
             </p>
           </div>
 
@@ -99,10 +97,7 @@ export default function Footer() {
 
         <div className="border-t border-white/10 mt-12 pt-8 flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-xs text-gray-500">
-            &copy; {year} ToolLink Australia Pty Ltd. All rights reserved. ABN 12 345 678 901.
-          </p>
-          <p className="text-xs text-gray-500">
-            Built for Australia&apos;s trades industry 🦘
+            © 2026 ToolLink. All rights reserved.
           </p>
         </div>
       </div>

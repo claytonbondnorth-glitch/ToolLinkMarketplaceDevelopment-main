@@ -2,8 +2,6 @@ import { useState, useEffect, useRef } from 'react';
 import { Search, ArrowRight, Shield, CheckCircle, MessageCircle, MapPin, Star, Zap, TrendingUp, ChevronRight, ChevronDown } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { CATEGORIES } from '../data/mockData';
-import DynamicStatCounter from '../components/DynamicStatCounter';
-import { getActiveListingsCount, getCitiesCoveredCount, getSalesThisMonthCount, getVerifiedTradesCount } from '../data/listingStats';
 import ListingCard from '../components/ListingCard';
 import UserAvatar from '../components/UserAvatar';
 import { supabase } from '../../lib/supabase';
@@ -56,6 +54,29 @@ type TopSellerTestimonial = {
   locationLabel: string;
   recentQuote: string;
 };
+
+const featureHighlights = [
+  {
+    icon: CheckCircle,
+    title: 'Free Listings',
+    description: 'List your tools for free with no hidden listing fees.',
+  },
+  {
+    icon: Shield,
+    title: 'Verified Sellers',
+    description: 'Verified trade profiles help buyers purchase with confidence.',
+  },
+  {
+    icon: MessageCircle,
+    title: 'Secure Messaging',
+    description: 'Communicate safely inside ToolLink before exchanging contact details.',
+  },
+  {
+    icon: MapPin,
+    title: 'Australia Wide',
+    description: 'Buy and sell professional tools anywhere across Australia.',
+  },
+];
 
 export default function HomePage() {
   const { navigate, openAuth, currentUser, listings } = useApp();
@@ -258,7 +279,7 @@ export default function HomePage() {
             style={{ animation: 'fadeDown 0.6s ease both' }}
           >
             <span className="w-2 h-2 bg-primary rounded-full animate-pulse" />
-            Australia's #1 Trade Tool Marketplace
+            Australia's Dedicated Trade Marketplace
           </div>
 
           {/* Heading */}
@@ -390,10 +411,15 @@ export default function HomePage() {
       <section className="bg-[#111111] border-b border-white/5">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-            <DynamicStatCounter initialValue={0} loadValue={getActiveListingsCount} label="Active Listings" />
-            <DynamicStatCounter initialValue={0} loadValue={getVerifiedTradesCount} label="Verified Trades" />
-            <DynamicStatCounter initialValue={0} loadValue={getSalesThisMonthCount} label="Sales This Month" />
-            <DynamicStatCounter initialValue={0} loadValue={getCitiesCoveredCount} label="Cities Covered" suffix="+" />
+            {featureHighlights.map(({ icon: Icon, title, description }) => (
+              <div key={title} className="text-center">
+                <div className="inline-flex items-center justify-center w-11 h-11 rounded-full bg-primary/15 border border-primary/20 text-primary mb-3">
+                  <Icon className="w-5 h-5" />
+                </div>
+                <p className="text-sm sm:text-base font-semibold text-white">{title}</p>
+                <p className="text-xs sm:text-sm text-gray-400 mt-1 leading-relaxed">{description}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -478,7 +504,7 @@ export default function HomePage() {
             <p className="text-xs font-bold text-primary uppercase tracking-widest mb-2">Built for Tradies</p>
             <h2 className="text-3xl sm:text-4xl font-extrabold text-foreground mb-3">Why ToolLink?</h2>
             <p className="text-muted-foreground max-w-xl mx-auto text-base">
-              Every feature is designed around how Australian trade professionals actually work.
+              Every feature is designed around the way Australian tradies actually buy, sell and work.
             </p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -511,7 +537,7 @@ export default function HomePage() {
               { step: '01', title: 'Create Your Account', desc: 'Sign up free in under a minute. Add your trade and location to build trust.' },
               { step: '02', title: 'List Your Tools', desc: 'Upload photos. Our AI suggests your price, brand, and description instantly.' },
               { step: '03', title: 'Connect & Negotiate', desc: 'Tradies message you directly. Discuss condition and agree on a fair price.' },
-              { step: '04', title: 'Complete the Sale', desc: 'Exchange goods and payment. Leave a review and build your reputation.' },
+              { step: '04', title: 'Complete the Sale', desc: 'Exchange payment and goods safely. Leave a review and build your reputation.' },
             ].map(({ step, title, desc }, i) => (
               <div key={step} className="relative">
                 {i < 3 && <div className="hidden lg:block absolute top-7 left-[calc(100%-1rem)] w-8 h-px bg-white/10 z-0" />}

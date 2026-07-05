@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Search, SlidersHorizontal, X, ChevronDown, Grid3X3, List, MapPin, Heart } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { CATEGORIES, BRANDS } from '../data/mockData';
@@ -67,7 +67,7 @@ function ListCard({ listing }: { listing: AppListing }) {
 }
 
 export default function MarketplacePage() {
-  const { listings, navParams } = useApp();
+  const { listings, navParams, navigate, currentUser, openAuth } = useApp();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [filters, setFilters] = useState<Filters>({
@@ -83,6 +83,38 @@ export default function MarketplacePage() {
 
   const set = (field: keyof Filters) => (value: string) =>
     setFilters((prev) => ({ ...prev, [field]: value }));
+
+  const [priceDraft, setPriceDraft] = useState({ minPrice: '', maxPrice: '' });
+  const [appliedPriceRange, setAppliedPriceRange] = useState({ minPrice: '', maxPrice: '' });
+
+  const applyPriceRange = (nextRange = priceDraft) => {
+    setAppliedPriceRange(nextRange);
+    setFilters((prev) => ({ ...prev, minPrice: nextRange.minPrice, maxPrice: nextRange.maxPrice }));
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      applyPriceRange(priceDraft);
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [priceDraft.minPrice, priceDraft.maxPrice]);
+
+  const updatePriceDraft = (field: 'minPrice' | 'maxPrice', value: string) => {
+    setPriceDraft((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handlePriceInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      applyPriceRange();
+    }
+  };
+
+  const clearPriceRange = () => {
+    const empty = { minPrice: '', maxPrice: '' };
+    setPriceDraft(empty);
+    applyPriceRange(empty);
+  };
 
   const activeListings = useMemo(() => listings.filter((listing) => listing.status === 'active'), [listings]);
   const categoryCounts = useMemo(
@@ -102,6 +134,13 @@ export default function MarketplacePage() {
     }, {}),
     [activeListings]
   );
+  const availableBrands = useMemo(() => {
+    const knownBrands = BRANDS.filter((brand) => (brandCounts[brand] ?? 0) > 0);
+    const dynamicBrands = Object.keys(brandCounts)
+      .filter((brand) => !BRANDS.includes(brand) && (brandCounts[brand] ?? 0) > 0)
+      .sort((a, b) => a.localeCompare(b));
+    return [...knownBrands, ...dynamicBrands];
+  }, [brandCounts]);
   const stateCounts = useMemo(
     () => activeListings.reduce<Record<string, number>>((acc, listing) => {
       const key = listing.state?.trim();
@@ -111,20 +150,6 @@ export default function MarketplacePage() {
     }, {}),
     [activeListings]
   );
-  const activeAreaCount = useMemo(() => {
-    const areas = new Set(
-      activeListings
-        .map((listing) => {
-          const location = listing.location?.trim().toLowerCase() ?? '';
-          const state = listing.state?.trim().toLowerCase() ?? '';
-          if (!location && !state) return '';
-          return `${location}|${state}`;
-        })
-        .filter(Boolean)
-    );
-    return areas.size;
-  }, [activeListings]);
-
   const filtered = useMemo(() => {
     let result = activeListings;
     if (filters.query) {
@@ -137,21 +162,40 @@ export default function MarketplacePage() {
     if (filters.brand) result = result.filter((l) => l.brand === filters.brand);
     if (filters.condition) result = result.filter((l) => l.condition === filters.condition);
     if (filters.state) result = result.filter((l) => l.state === filters.state);
-    if (filters.minPrice) result = result.filter((l) => l.price >= Number(filters.minPrice));
-    if (filters.maxPrice) result = result.filter((l) => l.price <= Number(filters.maxPrice));
+    if (appliedPriceRange.minPrice) result = result.filter((l) => l.price >= Number(appliedPriceRange.minPrice));
+    if (appliedPriceRange.maxPrice) result = result.filter((l) => l.price <= Number(appliedPriceRange.maxPrice));
     switch (filters.sort) {
       case 'price-asc': return [...result].sort((a, b) => a.price - b.price);
       case 'price-desc': return [...result].sort((a, b) => b.price - a.price);
       case 'views': return [...result].sort((a, b) => b.views - a.views);
       default: return [...result].sort((a, b) => new Date(b.dateListed).getTime() - new Date(a.dateListed).getTime());
     }
-  }, [activeListings, filters]);
+  }, [activeListings, filters, appliedPriceRange.minPrice, appliedPriceRange.maxPrice]);
 
   const activeCategory = CATEGORIES.find((c) => c.id === filters.categoryId);
-  const clearFilters = () => setFilters({ query: '', categoryId: '', brand: '', condition: '', state: '', minPrice: '', maxPrice: '', sort: 'recent' });
+  const clearFilters = () => {
+    setFilters({ query: '', categoryId: '', brand: '', condition: '', state: '', minPrice: '', maxPrice: '', sort: 'recent' });
+    setPriceDraft({ minPrice: '', maxPrice: '' });
+    setAppliedPriceRange({ minPrice: '', maxPrice: '' });
+  };
   const activeFilterCount = [filters.categoryId, filters.brand, filters.condition, filters.state, filters.minPrice, filters.maxPrice].filter(Boolean).length;
+  const handleSellTools = () => {
+    if (currentUser) {
+      navigate('create');
+      return;
+    }
+    openAuth('register');
+  };
 
-  function FilterPanel() {
+  const handleBrowseCategories = () => {
+    if (window.innerWidth < 1024) {
+      setSidebarOpen(true);
+      return;
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const renderFilterPanel = () => {
     return (
       <div className="space-y-6">
         <div>
@@ -161,24 +205,31 @@ export default function MarketplacePage() {
             {CATEGORIES.map((cat) => (
               <button key={cat.id} onClick={() => set('categoryId')(cat.id)} className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${filters.categoryId === cat.id ? 'bg-primary text-white font-medium' : 'text-foreground hover:bg-muted'}`}>
                 <span>{cat.name}</span>
-                <span className={`text-xs ${filters.categoryId === cat.id ? 'text-white/70' : 'text-muted-foreground'}`}>{(categoryCounts[cat.id] ?? 0).toLocaleString()}</span>
+                {(categoryCounts[cat.id] ?? 0) > 0 && (
+                  <span className={`text-xs ${filters.categoryId === cat.id ? 'text-white/70' : 'text-muted-foreground'}`}>
+                    {(categoryCounts[cat.id] ?? 0).toLocaleString()}
+                  </span>
+                )}
               </button>
             ))}
           </div>
         </div>
         <div>
           <h3 className="text-sm font-semibold text-foreground mb-3">Brand</h3>
-          <select value={filters.brand} onChange={(e) => set('brand')(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary">
+          <select value={filters.brand} disabled={availableBrands.length === 0} onChange={(e) => set('brand')(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:cursor-not-allowed disabled:opacity-60">
             <option value="">All Brands</option>
-            {BRANDS.map((b) => <option key={b} value={b}>{`${b} (${(brandCounts[b] ?? 0).toLocaleString()})`}</option>)}
+            {availableBrands.map((b) => <option key={b} value={b}>{`${b}${(brandCounts[b] ?? 0) > 0 ? ` (${(brandCounts[b] ?? 0).toLocaleString()})` : ''}`}</option>)}
           </select>
+          {availableBrands.length === 0 && (
+            <p className="text-xs text-muted-foreground mt-2">Brands will appear as listings are added.</p>
+          )}
         </div>
         <div>
           <h3 className="text-sm font-semibold text-foreground mb-3">Price Range (AUD)</h3>
           <div className="flex items-center gap-2">
-            <input type="number" placeholder="Min" value={filters.minPrice} onChange={(e) => set('minPrice')(e.target.value)} className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+            <input type="number" placeholder="Min $AUD" value={priceDraft.minPrice} onChange={(e) => updatePriceDraft('minPrice', e.target.value)} onBlur={() => applyPriceRange()} onKeyDown={handlePriceInputKeyDown} className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
             <span className="text-muted-foreground flex-shrink-0">–</span>
-            <input type="number" placeholder="Max" value={filters.maxPrice} onChange={(e) => set('maxPrice')(e.target.value)} className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+            <input type="number" placeholder="Max $AUD" value={priceDraft.maxPrice} onChange={(e) => updatePriceDraft('maxPrice', e.target.value)} onBlur={() => applyPriceRange()} onKeyDown={handlePriceInputKeyDown} className="w-full px-3 py-2 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
           </div>
         </div>
         <div>
@@ -197,7 +248,9 @@ export default function MarketplacePage() {
           <h3 className="text-sm font-semibold text-foreground mb-3">State / Territory</h3>
           <div className="grid grid-cols-2 gap-1.5">
             {STATES.map((s) => (
-              <button key={s} onClick={() => set('state')(filters.state === s ? '' : s)} className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${filters.state === s ? 'bg-primary border-primary text-white' : 'border-border text-foreground hover:border-primary hover:text-primary'}`}>{`${s} (${(stateCounts[s] ?? 0).toLocaleString()})`}</button>
+              <button key={s} onClick={() => set('state')(filters.state === s ? '' : s)} className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${filters.state === s ? 'bg-primary border-primary text-white' : 'border-border text-foreground hover:border-primary hover:text-primary'}`}>
+                {`${s}${(stateCounts[s] ?? 0) > 0 ? ` (${(stateCounts[s] ?? 0).toLocaleString()})` : ''}`}
+              </button>
             ))}
           </div>
         </div>
@@ -208,7 +261,7 @@ export default function MarketplacePage() {
         )}
       </div>
     );
-  }
+  };
 
   return (
     <div className="min-h-screen bg-muted">
@@ -217,11 +270,11 @@ export default function MarketplacePage() {
           <div className="flex flex-col sm:flex-row sm:items-center gap-4">
             <div className="flex-1">
               <h1 className="text-2xl font-bold text-foreground">{activeCategory ? activeCategory.name : 'All Listings'}</h1>
-              <p className="text-sm text-muted-foreground mt-0.5">{filtered.length} {filtered.length === 1 ? 'listing' : 'listings'} found{filters.state && ` · ${filters.state}`} · {activeAreaCount} {activeAreaCount === 1 ? 'area' : 'areas'}</p>
+              <p className="text-sm text-muted-foreground mt-0.5">Browse professional tools from tradies across Australia.</p>
             </div>
             <div className="flex items-center gap-2 flex-1 max-w-md bg-muted rounded-xl px-4 py-2.5">
               <Search className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-              <input type="text" placeholder="Search listings..." value={filters.query} onChange={(e) => set('query')(e.target.value)} className="flex-1 bg-transparent text-sm border-none outline-none placeholder:text-muted-foreground" />
+              <input type="text" placeholder="Search tools, brands or keywords..." value={filters.query} onChange={(e) => set('query')(e.target.value)} className="flex-1 bg-transparent text-sm border-none outline-none placeholder:text-muted-foreground" />
               {filters.query && <button onClick={() => set('query')('')}><X className="w-4 h-4 text-muted-foreground hover:text-foreground" /></button>}
             </div>
           </div>
@@ -232,7 +285,7 @@ export default function MarketplacePage() {
         <div className="flex gap-6">
           <aside className="hidden lg:block w-64 flex-shrink-0">
             <div className="bg-white rounded-xl border border-border p-5 sticky top-24">
-              <FilterPanel />
+              {renderFilterPanel()}
             </div>
           </aside>
 
@@ -264,16 +317,27 @@ export default function MarketplacePage() {
                 {filters.brand && <span className="flex items-center gap-1 bg-primary/10 text-primary text-xs font-medium px-3 py-1 rounded-full">{filters.brand}<button onClick={() => set('brand')('')}><X className="w-3 h-3" /></button></span>}
                 {filters.condition && <span className="flex items-center gap-1 bg-primary/10 text-primary text-xs font-medium px-3 py-1 rounded-full">{filters.condition}<button onClick={() => set('condition')('')}><X className="w-3 h-3" /></button></span>}
                 {filters.state && <span className="flex items-center gap-1 bg-primary/10 text-primary text-xs font-medium px-3 py-1 rounded-full"><MapPin className="w-3 h-3" />{filters.state}<button onClick={() => set('state')('')}><X className="w-3 h-3" /></button></span>}
-                {(filters.minPrice || filters.maxPrice) && <span className="flex items-center gap-1 bg-primary/10 text-primary text-xs font-medium px-3 py-1 rounded-full">${filters.minPrice || '0'} – ${filters.maxPrice || '∞'}<button onClick={() => { set('minPrice')(''); set('maxPrice')(''); }}><X className="w-3 h-3" /></button></span>}
+                {(filters.minPrice || filters.maxPrice) && <span className="flex items-center gap-1 bg-primary/10 text-primary text-xs font-medium px-3 py-1 rounded-full">${filters.minPrice || '0'} – ${filters.maxPrice || '∞'}<button onClick={clearPriceRange}><X className="w-3 h-3" /></button></span>}
               </div>
             )}
 
             {filtered.length === 0 ? (
               <div className="bg-white rounded-xl border border-border p-16 text-center">
                 <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4"><Search className="w-8 h-8 text-muted-foreground" /></div>
-                <h3 className="font-bold text-foreground mb-2">No listings found</h3>
-                <p className="text-sm text-muted-foreground mb-5">Try adjusting your filters or search terms</p>
-                <button onClick={clearFilters} className="px-5 py-2 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-orange-600 transition-colors">Clear filters</button>
+                <h3 className="font-bold text-foreground mb-2">No listings available yet</h3>
+                <p className="text-sm text-muted-foreground mb-5 max-w-xl mx-auto">Be the first tradie to list professional tools on ToolLink Australia.</p>
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-8">
+                  <button onClick={handleSellTools} className="px-5 py-2 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-orange-600 transition-colors">Sell Your Tools</button>
+                  <button onClick={handleBrowseCategories} className="px-5 py-2 bg-muted text-foreground text-sm font-semibold rounded-xl hover:bg-accent transition-colors">Browse Categories</button>
+                </div>
+                {activeFilterCount > 0 && (
+                  <button onClick={clearFilters} className="px-4 py-1.5 text-xs text-destructive border border-destructive/30 rounded-lg hover:bg-red-50 transition-colors mb-8">Clear Filters</button>
+                )}
+                <div className="pt-8 border-t border-border max-w-2xl mx-auto">
+                  <h4 className="text-base font-bold text-foreground mb-2">Ready to sell?</h4>
+                  <p className="text-sm text-muted-foreground mb-4">List your first tool in under two minutes and reach buyers across Australia.</p>
+                  <button onClick={handleSellTools} className="px-5 py-2 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-orange-600 transition-colors">Create Your First Listing</button>
+                </div>
               </div>
             ) : viewMode === 'grid' ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -297,7 +361,7 @@ export default function MarketplacePage() {
               <button onClick={() => setSidebarOpen(false)} className="p-1.5 rounded-lg hover:bg-muted transition-colors"><X className="w-5 h-5" /></button>
             </div>
             <div className="px-5 py-5">
-              <FilterPanel />
+              {renderFilterPanel()}
               <button onClick={() => setSidebarOpen(false)} className="w-full mt-4 py-3 bg-primary text-white font-semibold rounded-xl hover:bg-orange-600 transition-colors">
                 Show {filtered.length} Results
               </button>
