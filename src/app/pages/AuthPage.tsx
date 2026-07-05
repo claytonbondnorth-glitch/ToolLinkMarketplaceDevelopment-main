@@ -261,7 +261,7 @@ export default function AuthPage() {
                         value={form.name}
                         onChange={set('name')}
                         placeholder="Jake Morrison"
-                        className="w-full px-4 py-2.5 rounded-xl border border-[#EBEBEB] bg-[#F9F9F9] focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-colors text-sm"
+                        className="w-full px-4 py-2.5 rounded-xl border border-[#EBEBEB] bg-[#F9F9F9] focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-colors text-base md:text-sm"
                       />
                     </div>
                   )}
@@ -276,7 +276,7 @@ export default function AuthPage() {
                       value={form.email}
                       onChange={set('email')}
                       placeholder="jake@example.com.au"
-                      className="w-full px-4 py-2.5 rounded-xl border border-[#EBEBEB] bg-[#F9F9F9] focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-colors text-sm"
+                      className="w-full px-4 py-2.5 rounded-xl border border-[#EBEBEB] bg-[#F9F9F9] focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-colors text-base md:text-sm"
                     />
                   </div>
 
@@ -303,7 +303,7 @@ export default function AuthPage() {
                           onChange={set('password')}
                           placeholder="••••••••"
                           minLength={6}
-                          className="w-full px-4 py-2.5 pr-11 rounded-xl border border-[#EBEBEB] bg-[#F9F9F9] focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-colors text-sm"
+                          className="w-full px-4 py-2.5 pr-11 rounded-xl border border-[#EBEBEB] bg-[#F9F9F9] focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-colors text-base md:text-sm"
                         />
                         <button
                           type="button"
@@ -327,7 +327,7 @@ export default function AuthPage() {
                         value={form.confirm}
                         onChange={set('confirm')}
                         placeholder="••••••••"
-                        className="w-full px-4 py-2.5 rounded-xl border border-[#EBEBEB] bg-[#F9F9F9] focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-colors text-sm"
+                        className="w-full px-4 py-2.5 rounded-xl border border-[#EBEBEB] bg-[#F9F9F9] focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-colors text-base md:text-sm"
                       />
                     </div>
                   )}
@@ -375,9 +375,13 @@ export default function AuthPage() {
                   {authMode === 'register' && (
                     <p className="text-xs text-muted-foreground text-center pt-1">
                       By creating an account you agree to our{' '}
-                      <a href="#" className="text-primary hover:underline">Terms of Use</a>
+                      <button type="button" onClick={() => navigate('terms')} className="text-primary hover:underline">
+                        Terms of Use
+                      </button>
                       {' '}and{' '}
-                      <a href="#" className="text-primary hover:underline">Privacy Policy</a>.
+                      <button type="button" onClick={() => navigate('privacy')} className="text-primary hover:underline">
+                        Privacy Policy
+                      </button>.
                     </p>
                   )}
                 </form>
@@ -423,9 +427,9 @@ export default function AuthPage() {
 
         {/* Bottom links */}
         <div className="mt-6 text-center text-xs text-muted-foreground space-x-4">
-          <a href="#" className="hover:text-primary transition-colors">Privacy Policy</a>
-          <a href="#" className="hover:text-primary transition-colors">Terms of Use</a>
-          <a href="#" className="hover:text-primary transition-colors">Help</a>
+          <button type="button" onClick={() => navigate('privacy')} className="hover:text-primary transition-colors">Privacy Policy</button>
+          <button type="button" onClick={() => navigate('terms')} className="hover:text-primary transition-colors">Terms of Use</button>
+          <button type="button" onClick={() => navigate('help')} className="hover:text-primary transition-colors">Help</button>
         </div>
       </div>
     </div>
