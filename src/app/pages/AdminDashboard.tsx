@@ -9,6 +9,8 @@ import { getVerificationBadgeLabel } from '../lib/verification';
 type AdminTab = 'analytics' | 'users' | 'listings' | 'reported' | 'verification' | 'categories';
 
 type VerificationReviewStatus = 'pending' | 'approved' | 'rejected';
+type ListingStatusFilter = 'all' | 'active' | 'sold';
+type VerificationStatusFilter = 'pending' | 'approved' | 'rejected' | 'all';
 
 interface VerificationApplication {
   id: string;
@@ -57,6 +59,8 @@ export default function AdminDashboard() {
   const [verificationApplications, setVerificationApplications] = useState<VerificationApplication[]>([]);
   const [loadingVerificationApplications, setLoadingVerificationApplications] = useState(false);
   const [reviewingApplicationId, setReviewingApplicationId] = useState<string | null>(null);
+  const [listingStatusFilter, setListingStatusFilter] = useState<ListingStatusFilter>('all');
+  const [verificationStatusFilter, setVerificationStatusFilter] = useState<VerificationStatusFilter>('pending');
   const [dashboardStats, setDashboardStats] = useState<DashboardStats>(EMPTY_DASHBOARD_STATS);
   const [statsLoading, setStatsLoading] = useState(false);
   const [statsError, setStatsError] = useState<string | null>(null);
@@ -78,6 +82,7 @@ export default function AdminDashboard() {
   }
 
   const activeListings = listings.filter((l) => l.status === 'active');
+  const soldListings = listings.filter((l) => l.status === 'sold');
   const flaggedListings = listings.filter((l) => l.reportCount > 0 || l.status === 'flagged');
 
   const categoryListingCounts = listings.reduce<Record<string, number>>((acc, listing) => {
@@ -143,13 +148,18 @@ export default function AdminDashboard() {
     void loadDashboardStats();
   }, [loadDashboardStats]);
 
-  const loadPendingVerificationApplications = useCallback(async () => {
+  const loadVerificationApplications = useCallback(async (statusFilter: VerificationStatusFilter) => {
     setLoadingVerificationApplications(true);
-    const { data, error } = await supabase
+    let query = supabase
       .from('verification_applications')
       .select('*')
-      .eq('status', 'pending')
       .order('created_at', { ascending: true });
+
+    if (statusFilter !== 'all') {
+      query = query.eq('status', statusFilter);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       toast.error('Unable to load verification applications.');
@@ -182,8 +192,8 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     if (tab !== 'verification') return;
-    void loadPendingVerificationApplications();
-  }, [tab, loadPendingVerificationApplications]);
+    void loadVerificationApplications(verificationStatusFilter);
+  }, [tab, verificationStatusFilter, loadVerificationApplications]);
 
   const reviewVerificationApplication = async (application: VerificationApplication, status: Exclude<VerificationReviewStatus, 'pending'>) => {
     setReviewingApplicationId(application.id);
@@ -259,7 +269,7 @@ export default function AdminDashboard() {
 
       setVerificationApplications((prev) => prev.filter((item) => item.id !== application.id));
       await refreshUserProfiles([application.userId]);
-      await loadPendingVerificationApplications();
+      await loadVerificationApplications(verificationStatusFilter);
       await loadDashboardStats();
       toast.success(`Application ${status}.`);
     } catch (error: any) {
@@ -270,11 +280,60 @@ export default function AdminDashboard() {
   };
 
   const statCards = [
-    { label: 'Total Users', value: dashboardStats.totalUsers.toLocaleString(), sub: 'Live from profiles table', icon: Users, color: 'bg-blue-500' },
-    { label: 'Active Listings', value: dashboardStats.activeListings.toLocaleString(), sub: 'status = active', icon: Package, color: 'bg-green-500' },
-    { label: 'Sold Listings', value: dashboardStats.soldListings.toLocaleString(), sub: 'status = sold', icon: TrendingUp, color: 'bg-primary' },
-    { label: 'Pending Verification', value: dashboardStats.pendingVerificationApplications.toLocaleString(), sub: 'Awaiting review', icon: Flag, color: 'bg-destructive' },
+    {
+      label: 'Total Users',
+      value: users.length.toLocaleString(),
+      sub: 'Live from profiles table',
+      icon: Users,
+      color: 'bg-blue-500',
+      onClick: () => setTab('users' as AdminTab),
+    },
+    {
+      label: 'Active Listings',
+      value: activeListings.length.toLocaleString(),
+      sub: 'status = active',
+      icon: Package,
+      color: 'bg-green-500',
+      onClick: () => {
+        setListingStatusFilter('active');
+        setTab('listings');
+      },
+    },
+    {
+      label: 'Sold Listings',
+      value: soldListings.length.toLocaleString(),
+      sub: 'status = sold',
+      icon: TrendingUp,
+      color: 'bg-primary',
+      onClick: () => {
+        setListingStatusFilter('sold');
+        setTab('listings');
+      },
+    },
+    {
+      label: 'Pending Verification',
+      value: dashboardStats.pendingVerificationApplications.toLocaleString(),
+      sub: 'Awaiting review',
+      icon: Flag,
+      color: 'bg-destructive',
+      onClick: () => {
+        setVerificationStatusFilter('pending');
+        setTab('verification');
+      },
+    },
   ];
+
+  const filteredListings = listingStatusFilter === 'all'
+    ? listings
+    : listings.filter((listing) => listing.status === listingStatusFilter);
+
+  const listingStatusFilterLabel = listingStatusFilter === 'all'
+    ? 'All statuses'
+    : `Status: ${listingStatusFilter}`;
+
+  const verificationStatusFilterLabel = verificationStatusFilter === 'all'
+    ? 'All applications'
+    : `Status: ${verificationStatusFilter}`;
 
   const tabs: { id: AdminTab; label: string; icon: React.ElementType; count?: number }[] = [
     { id: 'analytics', label: 'Analytics', icon: BarChart2 },
@@ -317,8 +376,12 @@ export default function AdminDashboard() {
 
           {/* Stat cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
-            {statCards.map(({ label, value, sub, icon: Icon, color }) => (
-              <div key={label} className="bg-white/10 rounded-xl p-4 border border-white/10">
+            {statCards.map(({ label, value, sub, icon: Icon, color, onClick }) => (
+              <button
+                key={label}
+                onClick={onClick}
+                className="bg-white/10 rounded-xl p-4 border border-white/10 text-left cursor-pointer hover:bg-white/15 hover:border-white/20 transition-colors"
+              >
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-xs text-gray-400 font-medium">{label}</span>
                   <div className={`w-8 h-8 ${color} rounded-lg flex items-center justify-center`}>
@@ -327,7 +390,7 @@ export default function AdminDashboard() {
                 </div>
                 <p className="text-2xl font-bold text-white">{value}</p>
                 <p className="text-xs text-gray-400 mt-1">{statsLoading ? 'Loading...' : sub}</p>
-              </div>
+              </button>
             ))}
           </div>
         </div>
@@ -382,130 +445,157 @@ export default function AdminDashboard() {
             <div className="px-6 py-4 border-b border-border flex items-center justify-between">
               <h3 className="font-bold text-foreground">All Users ({users.length})</h3>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-muted">
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">User</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Email</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Location</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Status</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Joined</th>
-                    <th className="px-4 py-3" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.map((user) => (
-                    <tr key={user.id} className="border-b border-border last:border-0 hover:bg-muted/50 transition-colors">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <img src={user.avatar} alt={user.name} className="w-9 h-9 rounded-full object-cover border border-border flex-shrink-0" />
-                          <div>
-                            <p className="font-semibold text-foreground">{user.name}</p>
-                            <p className="text-xs text-muted-foreground">{user.totalListings} listings · ★{user.rating}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-4 text-muted-foreground">{user.email}</td>
-                      <td className="px-4 py-4 text-muted-foreground">{user.location}</td>
-                      <td className="px-4 py-4">
-                        <div className="flex flex-col gap-1">
-                          {getVerificationBadgeLabel(user) && <span className="inline-flex items-center gap-1 text-xs text-green-700 bg-green-100 px-2 py-0.5 rounded-full w-fit"><CheckCircle className="w-3 h-3" />{getVerificationBadgeLabel(user)}</span>}
-                          {user.isAdmin && <span className="inline-flex items-center gap-1 text-xs text-primary bg-accent px-2 py-0.5 rounded-full w-fit">Admin</span>}
-                          {!user.verified && !user.isAdmin && <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full w-fit">Standard</span>}
-                        </div>
-                      </td>
-                      <td className="px-4 py-4 text-muted-foreground text-xs">{new Date(user.memberSince).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
-                      <td className="px-4 py-4">
-                        {!user.isAdmin && user.id !== currentUser.id && (
-                          <div className="flex items-center gap-2 justify-end">
-                            <button
-                              onClick={() => navigate('seller', { userId: user.id })}
-                              className="p-1.5 text-muted-foreground hover:text-primary hover:bg-accent rounded-lg transition-colors"
-                              title="View profile"
-                            >
-                              <Eye className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => setConfirmDelete(user.id)}
-                              className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-red-50 rounded-lg transition-colors"
-                              title="Delete user"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        )}
-                      </td>
+            {users.length === 0 ? (
+              <div className="text-center py-10 px-6">
+                <Users className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+                <p className="font-medium text-foreground">No users found</p>
+                <p className="text-sm text-muted-foreground mt-1">There are no user profiles to display.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-muted">
+                      <th className="text-left px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">User</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Email</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Location</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Status</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Joined</th>
+                      <th className="px-4 py-3" />
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {users.map((user) => (
+                      <tr key={user.id} className="border-b border-border last:border-0 hover:bg-muted/50 transition-colors">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <img src={user.avatar} alt={user.name} className="w-9 h-9 rounded-full object-cover border border-border flex-shrink-0" />
+                            <div>
+                              <p className="font-semibold text-foreground">{user.name}</p>
+                              <p className="text-xs text-muted-foreground">{user.totalListings} listings · ★{user.rating}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-4 text-muted-foreground">{user.email}</td>
+                        <td className="px-4 py-4 text-muted-foreground">{user.location}</td>
+                        <td className="px-4 py-4">
+                          <div className="flex flex-col gap-1">
+                            {getVerificationBadgeLabel(user) && <span className="inline-flex items-center gap-1 text-xs text-green-700 bg-green-100 px-2 py-0.5 rounded-full w-fit"><CheckCircle className="w-3 h-3" />{getVerificationBadgeLabel(user)}</span>}
+                            {user.isAdmin && <span className="inline-flex items-center gap-1 text-xs text-primary bg-accent px-2 py-0.5 rounded-full w-fit">Admin</span>}
+                            {!user.verified && !user.isAdmin && <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full w-fit">Standard</span>}
+                          </div>
+                        </td>
+                        <td className="px-4 py-4 text-muted-foreground text-xs">{new Date(user.memberSince).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
+                        <td className="px-4 py-4">
+                          {!user.isAdmin && user.id !== currentUser.id && (
+                            <div className="flex items-center gap-2 justify-end">
+                              <button
+                                onClick={() => navigate('seller', { userId: user.id })}
+                                className="p-1.5 text-muted-foreground hover:text-primary hover:bg-accent rounded-lg transition-colors"
+                                title="View profile"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => setConfirmDelete(user.id)}
+                                className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-red-50 rounded-lg transition-colors"
+                                title="Delete user"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 
         {/* Listings */}
         {tab === 'listings' && (
           <div className="bg-white rounded-xl border border-border overflow-hidden">
-            <div className="px-6 py-4 border-b border-border">
-              <h3 className="font-bold text-foreground">All Listings ({listings.length})</h3>
+            <div className="px-6 py-4 border-b border-border flex items-center justify-between gap-3">
+              <h3 className="font-bold text-foreground">Listings ({filteredListings.length})</h3>
+              <div className="flex items-center gap-2">
+                <span className="text-xs px-2.5 py-1 rounded-full bg-muted text-muted-foreground">{listingStatusFilterLabel}</span>
+                {listingStatusFilter !== 'all' && (
+                  <button
+                    onClick={() => setListingStatusFilter('all')}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    Show all
+                  </button>
+                )}
+              </div>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-muted">
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Listing</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Price</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Seller</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Status</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Views</th>
-                    <th className="px-4 py-3" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {listings.map((listing) => {
-                    const seller = users.find((u) => u.id === listing.sellerId);
-                    return (
-                      <tr key={listing.id} className="border-b border-border last:border-0 hover:bg-muted/50 transition-colors">
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-3">
-                            <img src={listing.images[0]} alt={listing.title} className="w-10 h-10 rounded-xl object-cover border border-border flex-shrink-0" />
-                            <div>
-                              <p className="font-semibold text-foreground line-clamp-1 max-w-[200px]">{listing.title}</p>
-                              <p className="text-xs text-muted-foreground">{listing.brand} · {listing.category}</p>
+            {filteredListings.length === 0 ? (
+              <div className="text-center py-10 px-6">
+                <Package className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+                <p className="font-medium text-foreground">No listings found</p>
+                <p className="text-sm text-muted-foreground mt-1">No records match the selected listing status filter.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-muted">
+                      <th className="text-left px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Listing</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Price</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Seller</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Status</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Views</th>
+                      <th className="px-4 py-3" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredListings.map((listing) => {
+                      const seller = users.find((u) => u.id === listing.sellerId);
+                      return (
+                        <tr key={listing.id} className="border-b border-border last:border-0 hover:bg-muted/50 transition-colors">
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              <img src={listing.images[0]} alt={listing.title} className="w-10 h-10 rounded-xl object-cover border border-border flex-shrink-0" />
+                              <div>
+                                <p className="font-semibold text-foreground line-clamp-1 max-w-[200px]">{listing.title}</p>
+                                <p className="text-xs text-muted-foreground">{listing.brand} · {listing.category}</p>
+                              </div>
                             </div>
-                          </div>
-                        </td>
-                        <td className="px-4 py-4 font-semibold text-primary">${listing.price.toLocaleString()}</td>
-                        <td className="px-4 py-4 text-muted-foreground text-xs">{seller?.name}</td>
-                        <td className="px-4 py-4">
-                          <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
-                            listing.status === 'active' ? 'bg-green-100 text-green-700' :
-                            listing.status === 'sold' ? 'bg-blue-100 text-blue-700' :
-                            listing.status === 'flagged' ? 'bg-red-100 text-red-700' :
-                            'bg-muted text-muted-foreground'
-                          }`}>
-                            {listing.status}
-                          </span>
-                        </td>
-                        <td className="px-4 py-4 text-muted-foreground">{listing.views}</td>
-                        <td className="px-4 py-4">
-                          <div className="flex items-center gap-2 justify-end">
-                            <button onClick={() => navigate('listing', { listingId: listing.id })} className="p-1.5 text-muted-foreground hover:text-primary hover:bg-accent rounded-lg transition-colors" title="View"><Eye className="w-4 h-4" /></button>
-                            {listing.status !== 'active' ? (
-                              <button onClick={() => updateListingStatus(listing.id, 'active')} className="p-1.5 text-muted-foreground hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors" title="Approve"><CheckCircle className="w-4 h-4" /></button>
-                            ) : (
-                              <button onClick={() => updateListingStatus(listing.id, 'flagged')} className="p-1.5 text-muted-foreground hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors" title="Flag"><Flag className="w-4 h-4" /></button>
-                            )}
-                            <button onClick={() => setConfirmDelete(listing.id)} className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-red-50 rounded-lg transition-colors" title="Delete"><Trash2 className="w-4 h-4" /></button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                          </td>
+                          <td className="px-4 py-4 font-semibold text-primary">${listing.price.toLocaleString()}</td>
+                          <td className="px-4 py-4 text-muted-foreground text-xs">{seller?.name}</td>
+                          <td className="px-4 py-4">
+                            <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
+                              listing.status === 'active' ? 'bg-green-100 text-green-700' :
+                              listing.status === 'sold' ? 'bg-blue-100 text-blue-700' :
+                              listing.status === 'flagged' ? 'bg-red-100 text-red-700' :
+                              'bg-muted text-muted-foreground'
+                            }`}>
+                              {listing.status}
+                            </span>
+                          </td>
+                          <td className="px-4 py-4 text-muted-foreground">{listing.views}</td>
+                          <td className="px-4 py-4">
+                            <div className="flex items-center gap-2 justify-end">
+                              <button onClick={() => navigate('listing', { listingId: listing.id })} className="p-1.5 text-muted-foreground hover:text-primary hover:bg-accent rounded-lg transition-colors" title="View"><Eye className="w-4 h-4" /></button>
+                              {listing.status !== 'active' ? (
+                                <button onClick={() => updateListingStatus(listing.id, 'active')} className="p-1.5 text-muted-foreground hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors" title="Approve"><CheckCircle className="w-4 h-4" /></button>
+                              ) : (
+                                <button onClick={() => updateListingStatus(listing.id, 'flagged')} className="p-1.5 text-muted-foreground hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors" title="Flag"><Flag className="w-4 h-4" /></button>
+                              )}
+                              <button onClick={() => setConfirmDelete(listing.id)} className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-red-50 rounded-lg transition-colors" title="Delete"><Trash2 className="w-4 h-4" /></button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 
@@ -556,7 +646,20 @@ export default function AdminDashboard() {
         {/* Verification */}
         {tab === 'verification' && (
           <div className="bg-white rounded-xl border border-border p-6">
-            <h3 className="font-bold text-foreground mb-5">Pending Verification Applications ({verificationApplications.length})</h3>
+            <div className="flex items-center justify-between gap-3 mb-5">
+              <h3 className="font-bold text-foreground">Verification Applications ({verificationApplications.length})</h3>
+              <div className="flex items-center gap-2">
+                <span className="text-xs px-2.5 py-1 rounded-full bg-muted text-muted-foreground">{verificationStatusFilterLabel}</span>
+                {verificationStatusFilter !== 'pending' && (
+                  <button
+                    onClick={() => setVerificationStatusFilter('pending')}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    Show pending
+                  </button>
+                )}
+              </div>
+            </div>
 
             {loadingVerificationApplications ? (
               <p className="text-sm text-muted-foreground">Loading applications...</p>

@@ -29,6 +29,7 @@ export default function ListingDetailPage() {
   const [showSoldModal, setShowSoldModal] = useState(false);
   const [selectedBuyerId, setSelectedBuyerId] = useState('');
   const [isMarkingSold, setIsMarkingSold] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
 
   const isSaved = savedIds.has(listing.id);
   const related = listings.filter((l) => l.categoryId === listing?.categoryId && l.id !== listing?.id).slice(0, 3);
@@ -104,6 +105,28 @@ export default function ListingDetailPage() {
       setIsMarkingSold(false);
     }
   };
+
+  const handleOpenReportModal = () => {
+    setShowReportModal(true);
+  };
+
+  const reportEmailSubject = `Report Listing - ${listing.title}`;
+  const reportEmailBody = [
+    'Hello ToolLink Support,',
+    '',
+    'I would like to report the following listing.',
+    '',
+    'Listing:',
+    listing.title,
+    '',
+    'Reason:',
+    '',
+    'Additional Details:',
+    '',
+    '',
+    'Thank you.',
+  ].join('\n');
+  const reportMailtoHref = `mailto:support@toollinkk.com?subject=${encodeURIComponent(reportEmailSubject)}&body=${encodeURIComponent(reportEmailBody)}`;
 
   if (!listing) return null;
 
@@ -229,7 +252,7 @@ export default function ListingDetailPage() {
 
               <div className="mt-6 pt-5 border-t border-border">
                 <button
-                  onClick={() => navigate('browse', { categoryId: listing.categoryId })}
+                  onClick={handleOpenReportModal}
                   className="text-sm text-primary hover:underline font-medium"
                 >
                   Report this listing
@@ -426,6 +449,46 @@ export default function ListingDetailPage() {
                 </button>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {showReportModal && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowReportModal(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6">
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <h3 className="font-bold text-foreground">Report this listing</h3>
+                <p className="text-sm text-muted-foreground">
+                  To report this listing, please email{' '}
+                  <a href={reportMailtoHref} className="text-primary hover:underline font-medium">support@toollinkk.com</a>{' '}
+                  with the listing title, seller name, and reason for the report. Our team will review it.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowReportModal(false)}
+                className="p-1.5 rounded-lg hover:bg-muted transition-colors"
+                aria-label="Close report form"
+              >
+                <ChevronRight className="w-5 h-5 rotate-45" />
+              </button>
+            </div>
+
+            <div className="mt-6 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+              <button
+                onClick={() => setShowReportModal(false)}
+                className="px-4 py-2 rounded-xl border border-border text-sm font-semibold text-foreground hover:bg-muted transition-colors"
+              >
+                Cancel
+              </button>
+              <a
+                href={reportMailtoHref}
+                className="px-4 py-2 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-orange-600 transition-colors text-center"
+              >
+                Email support@toollinkk.com
+              </a>
+            </div>
           </div>
         </div>
       )}

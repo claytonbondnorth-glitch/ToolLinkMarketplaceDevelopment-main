@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Search, SlidersHorizontal, X, ChevronDown, Grid3X3, List, MapPin, Heart } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { CATEGORIES, BRANDS } from '../data/mockData';
@@ -67,9 +67,19 @@ function ListCard({ listing }: { listing: AppListing }) {
 }
 
 export default function MarketplacePage() {
-  const { listings, navParams, navigate, currentUser, openAuth } = useApp();
+  const {
+    listings,
+    navParams,
+    navigate,
+    currentUser,
+    openAuth,
+    browseQaSeedEnabled,
+    enableBrowseQaSeed,
+    disableBrowseQaSeed,
+  } = useApp();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const isLocalDev = import.meta.env.DEV;
   const [filters, setFilters] = useState<Filters>({
     query: '',
     categoryId: navParams.categoryId ?? '',
@@ -81,16 +91,54 @@ export default function MarketplacePage() {
     sort: 'recent',
   });
 
-  const set = (field: keyof Filters) => (value: string) =>
-    setFilters((prev) => ({ ...prev, [field]: value }));
+  const preserveScrollPosition = useCallback((scrollY: number) => {
+    requestAnimationFrame(() => {
+      if (window.scrollY !== scrollY) {
+        window.scrollTo({ top: scrollY, behavior: 'auto' });
+      }
+    });
+  }, []);
 
+  const updateFilters = useCallback((updater: (prev: Filters) => Filters) => {
+    const scrollY = window.scrollY;
+    setFilters((prev) => updater(prev));
+    preserveScrollPosition(scrollY);
+  }, [preserveScrollPosition]);
+
+  const set = useCallback((field: keyof Filters) => (value: string) => {
+    updateFilters((prev) => ({ ...prev, [field]: value }));
+  }, [updateFilters]);
+
+  const [searchDraft, setSearchDraft] = useState('');
   const [priceDraft, setPriceDraft] = useState({ minPrice: '', maxPrice: '' });
   const [appliedPriceRange, setAppliedPriceRange] = useState({ minPrice: '', maxPrice: '' });
 
-  const applyPriceRange = (nextRange = priceDraft) => {
-    setAppliedPriceRange(nextRange);
-    setFilters((prev) => ({ ...prev, minPrice: nextRange.minPrice, maxPrice: nextRange.maxPrice }));
-  };
+  const applySearchQuery = useCallback((nextQuery = searchDraft) => {
+    updateFilters((prev) => {
+      if (prev.query === nextQuery) return prev;
+      return { ...prev, query: nextQuery };
+    });
+  }, [searchDraft, updateFilters]);
+
+  const applyPriceRange = useCallback((nextRange = priceDraft) => {
+    setAppliedPriceRange((prev) => {
+      if (prev.minPrice === nextRange.minPrice && prev.maxPrice === nextRange.maxPrice) return prev;
+      return nextRange;
+    });
+
+    updateFilters((prev) => {
+      if (prev.minPrice === nextRange.minPrice && prev.maxPrice === nextRange.maxPrice) return prev;
+      return { ...prev, minPrice: nextRange.minPrice, maxPrice: nextRange.maxPrice };
+    });
+  }, [priceDraft, updateFilters]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      applySearchQuery(searchDraft);
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [searchDraft, applySearchQuery]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -98,7 +146,18 @@ export default function MarketplacePage() {
     }, 400);
 
     return () => clearTimeout(timer);
-  }, [priceDraft.minPrice, priceDraft.maxPrice]);
+  }, [priceDraft.minPrice, priceDraft.maxPrice, applyPriceRange]);
+
+  const handleSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      applySearchQuery((event.target as HTMLInputElement).value);
+    }
+  };
+
+  const clearSearch = () => {
+    setSearchDraft('');
+    applySearchQuery('');
+  };
 
   const updatePriceDraft = (field: 'minPrice' | 'maxPrice', value: string) => {
     setPriceDraft((prev) => ({ ...prev, [field]: value }));
@@ -117,14 +176,27 @@ export default function MarketplacePage() {
   };
 
   const activeListings = useMemo(() => listings.filter((listing) => listing.status === 'active'), [listings]);
-  const categoryCounts = useMemo(
-    () => activeListings.reduce<Record<string, number>>((acc, listing) => {
+  const categoryCounts = useMemo(() => {
+    let result = activeListings;
+
+    if (filters.query) {
+      const q = filters.query.toLowerCase();
+      result = result.filter(
+        (l) => l.title.toLowerCase().includes(q) || l.brand.toLowerCase().includes(q) || l.description.toLowerCase().includes(q)
+      );
+    }
+    if (filters.brand) result = result.filter((l) => l.brand === filters.brand);
+    if (filters.condition) result = result.filter((l) => l.condition === filters.condition);
+    if (filters.state) result = result.filter((l) => l.state === filters.state);
+    if (appliedPriceRange.minPrice) result = result.filter((l) => l.price >= Number(appliedPriceRange.minPrice));
+    if (appliedPriceRange.maxPrice) result = result.filter((l) => l.price <= Number(appliedPriceRange.maxPrice));
+
+    return result.reduce<Record<string, number>>((acc, listing) => {
       if (!listing.categoryId) return acc;
       acc[listing.categoryId] = (acc[listing.categoryId] ?? 0) + 1;
       return acc;
-    }, {}),
-    [activeListings]
-  );
+    }, {});
+  }, [activeListings, filters.query, filters.brand, filters.condition, filters.state, appliedPriceRange.minPrice, appliedPriceRange.maxPrice]);
   const brandCounts = useMemo(
     () => activeListings.reduce<Record<string, number>>((acc, listing) => {
       const key = listing.brand?.trim();
@@ -174,7 +246,8 @@ export default function MarketplacePage() {
 
   const activeCategory = CATEGORIES.find((c) => c.id === filters.categoryId);
   const clearFilters = () => {
-    setFilters({ query: '', categoryId: '', brand: '', condition: '', state: '', minPrice: '', maxPrice: '', sort: 'recent' });
+    updateFilters(() => ({ query: '', categoryId: '', brand: '', condition: '', state: '', minPrice: '', maxPrice: '', sort: 'recent' }));
+    setSearchDraft('');
     setPriceDraft({ minPrice: '', maxPrice: '' });
     setAppliedPriceRange({ minPrice: '', maxPrice: '' });
   };
@@ -193,6 +266,14 @@ export default function MarketplacePage() {
       return;
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleEnableQaSeed = () => {
+    enableBrowseQaSeed();
+  };
+
+  const handleDisableQaSeed = () => {
+    disableBrowseQaSeed();
   };
 
   const renderFilterPanel = () => {
@@ -274,14 +355,38 @@ export default function MarketplacePage() {
             </div>
             <div className="flex items-center gap-2 flex-1 max-w-md bg-muted rounded-xl px-4 py-2.5">
               <Search className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-              <input type="text" placeholder="Search tools, brands or keywords..." value={filters.query} onChange={(e) => set('query')(e.target.value)} className="flex-1 bg-transparent text-sm border-none outline-none placeholder:text-muted-foreground" />
-              {filters.query && <button onClick={() => set('query')('')}><X className="w-4 h-4 text-muted-foreground hover:text-foreground" /></button>}
+              <input type="text" placeholder="Search tools, brands or keywords..." value={searchDraft} onChange={(e) => setSearchDraft(e.target.value)} onBlur={() => applySearchQuery()} onKeyDown={handleSearchKeyDown} className="flex-1 bg-transparent text-sm border-none outline-none placeholder:text-muted-foreground" />
+              {searchDraft && <button onClick={clearSearch}><X className="w-4 h-4 text-muted-foreground hover:text-foreground" /></button>}
             </div>
           </div>
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        {isLocalDev && (
+          <div className="mb-4 bg-white rounded-xl border border-border px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-foreground">Local QA Seed Listings</p>
+              <p className="text-xs text-muted-foreground">Temporary [TEST] listings for Browse QA. Local development only.</p>
+            </div>
+            {browseQaSeedEnabled ? (
+              <button
+                onClick={handleDisableQaSeed}
+                className="px-4 py-2 text-sm font-semibold rounded-xl border border-border text-foreground hover:bg-muted transition-colors"
+              >
+                Remove QA Seed Listings
+              </button>
+            ) : (
+              <button
+                onClick={handleEnableQaSeed}
+                className="px-4 py-2 text-sm font-semibold rounded-xl bg-primary text-white hover:bg-orange-600 transition-colors"
+              >
+                Seed QA Listings
+              </button>
+            )}
+          </div>
+        )}
+
         <div className="flex gap-6">
           <aside className="hidden lg:block w-64 flex-shrink-0">
             <div className="bg-white rounded-xl border border-border p-5 sticky top-24">
@@ -324,8 +429,8 @@ export default function MarketplacePage() {
             {filtered.length === 0 ? (
               <div className="bg-white rounded-xl border border-border p-16 text-center">
                 <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4"><Search className="w-8 h-8 text-muted-foreground" /></div>
-                <h3 className="font-bold text-foreground mb-2">No listings available yet</h3>
-                <p className="text-sm text-muted-foreground mb-5 max-w-xl mx-auto">Be the first tradie to list professional tools on ToolLink Australia.</p>
+                <h3 className="font-bold text-foreground mb-2">No listings match your filters</h3>
+                <p className="text-sm text-muted-foreground mb-5 max-w-xl mx-auto">Try adjusting your price range, category or search terms.</p>
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-8">
                   <button onClick={handleSellTools} className="px-5 py-2 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-orange-600 transition-colors">Sell Your Tools</button>
                   <button onClick={handleBrowseCategories} className="px-5 py-2 bg-muted text-foreground text-sm font-semibold rounded-xl hover:bg-accent transition-colors">Browse Categories</button>
