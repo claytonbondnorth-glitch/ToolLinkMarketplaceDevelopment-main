@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { Search, ArrowRight, Shield, CheckCircle, MessageCircle, MapPin, Star, Zap, TrendingUp, ChevronRight, ChevronDown } from 'lucide-react';
+import { toast } from 'sonner';
 import { useApp } from '../context/AppContext';
 import { CATEGORIES } from '../data/mockData';
 import ListingCard from '../components/ListingCard';
 import UserAvatar from '../components/UserAvatar';
 import { supabase } from '../../lib/supabase';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../components/ui/dialog';
 
 /* Animated counter hook */
 function useCounter(target: number, duration = 1800, start = false) {
@@ -84,6 +86,9 @@ export default function HomePage() {
   const [searchState, setSearchState] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [heroLoaded, setHeroLoaded] = useState(false);
+  const [financeModalOpen, setFinanceModalOpen] = useState(false);
+  const [financeEmail, setFinanceEmail] = useState('');
+  const [financeSubmitting, setFinanceSubmitting] = useState(false);
   const [topSellerTestimonial, setTopSellerTestimonial] = useState<TopSellerTestimonial | null>(null);
   const [testimonialLoaded, setTestimonialLoaded] = useState(false);
 
@@ -254,6 +259,70 @@ export default function HomePage() {
     { icon: TrendingUp, title: 'Best Prices', desc: 'Market-informed pricing data to help you buy smart and sell faster.' },
   ];
 
+  const financeFeatures = [
+    'Equipment Finance',
+    'Tool Finance',
+    'Fast Online Applications',
+    'Personal & Business Options',
+    'Trusted Australian Finance Partners',
+  ];
+
+  const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+
+  const joinFinanceWaitlist = async (emailInput: string, userId?: string) => {
+    const normalizedEmail = emailInput.trim().toLowerCase();
+    if (!isValidEmail(normalizedEmail)) {
+      toast.error('Please enter a valid email address.');
+      return;
+    }
+
+    setFinanceSubmitting(true);
+    const payload: { email: string; user_id?: string; source: string } = {
+      email: normalizedEmail,
+      source: 'homepage_finance_section',
+    };
+
+    if (userId) payload.user_id = userId;
+
+    const { error } = await supabase
+      .from('finance_waitlist')
+      .insert(payload);
+
+    setFinanceSubmitting(false);
+
+    if (error) {
+      if (error.code === '23505') {
+        toast('You’re already on the ToolLink Finance waiting list.');
+        setFinanceModalOpen(false);
+        return;
+      }
+
+      toast.error('Unable to join the ToolLink Finance waiting list right now. Please try again.');
+      return;
+    }
+
+    toast.success('You’re on the list! We’ll email you when ToolLink Finance becomes available.');
+    setFinanceModalOpen(false);
+    setFinanceEmail('');
+  };
+
+  const handleFinanceNotifyClick = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (user?.email?.trim()) {
+      await joinFinanceWaitlist(user.email, user.id);
+      return;
+    }
+
+    setFinanceEmail('');
+    setFinanceModalOpen(true);
+  };
+
+  const handleFinanceGuestSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    await joinFinanceWaitlist(financeEmail);
+  };
+
   return (
     <div className="min-h-screen overflow-x-hidden">
 
@@ -403,6 +472,45 @@ export default function HomePage() {
           {/* Scroll hint */}
           <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 opacity-40">
             <ChevronDown className="w-5 h-5 animate-bounce" />
+          </div>
+        </div>
+      </section>
+
+      {/* ─── TOOLLINK FINANCE ─── */}
+      <section className="relative py-20 md:py-24 bg-[#0E0E0E] text-white overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,115,0,0.16),transparent_55%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_left,rgba(255,255,255,0.06),transparent_50%)]" />
+
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-[#171717] via-[#141414] to-[#0F0F0F] p-7 sm:p-10 md:p-12 shadow-2xl shadow-black/40">
+            <div className="max-w-3xl">
+              <h2 className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight mb-2">ToolLink Finance</h2>
+              <p className="text-primary font-semibold italic text-base sm:text-lg mb-6">Coming Soon</p>
+
+              <p className="text-sm sm:text-base text-gray-300 leading-relaxed mb-7">
+                ToolLink is expanding beyond buying and selling tools. We are currently partnering with accredited Australian finance professionals to offer equipment and tool finance directly through the platform.
+              </p>
+              <p className="text-sm sm:text-base text-gray-300 leading-relaxed mb-8">
+                Whether you&apos;re a sole trader, business owner or individual, ToolLink Finance will make it easier to purchase the tools and equipment you need.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-10">
+                {financeFeatures.map((feature) => (
+                  <div key={feature} className="flex items-center gap-2.5 text-sm sm:text-base text-white/95">
+                    <CheckCircle className="w-4.5 h-4.5 text-primary flex-shrink-0" />
+                    <span>{feature}</span>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                onClick={handleFinanceNotifyClick}
+                disabled={financeSubmitting}
+                className="inline-flex items-center justify-center px-8 py-4 bg-primary text-white font-bold rounded-2xl hover:bg-orange-600 active:scale-[0.98] transition-all text-sm sm:text-base shadow-lg shadow-primary/25"
+              >
+                {financeSubmitting ? 'Joining Waitlist...' : 'Notify Me When Finance Launches'}
+              </button>
+            </div>
           </div>
         </div>
       </section>
@@ -613,6 +721,40 @@ export default function HomePage() {
         @keyframes fadeUp { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes fadeDown { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: translateY(0); } }
       `}</style>
+
+      <Dialog open={financeModalOpen} onOpenChange={setFinanceModalOpen}>
+        <DialogContent className="max-w-xl rounded-2xl border border-border bg-background px-6 py-7 sm:px-8 sm:py-8">
+          <DialogHeader>
+            <DialogTitle className="text-xl sm:text-2xl font-extrabold text-foreground">ToolLink Finance is coming soon.</DialogTitle>
+            <DialogDescription className="text-sm sm:text-base text-muted-foreground leading-relaxed pt-2">
+              We are currently finalising partnerships with accredited finance professionals. Register your interest today and we&apos;ll notify you when ToolLink Finance becomes available.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleFinanceGuestSubmit} className="mt-4 space-y-3">
+            <label htmlFor="finance-waitlist-email" className="text-sm font-semibold text-foreground block">
+              Email Address
+            </label>
+            <input
+              id="finance-waitlist-email"
+              type="email"
+              required
+              autoComplete="email"
+              placeholder="you@example.com"
+              value={financeEmail}
+              onChange={(event) => setFinanceEmail(event.target.value)}
+              className="w-full h-11 rounded-xl border border-border bg-background px-4 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/35"
+            />
+            <button
+              type="submit"
+              disabled={financeSubmitting}
+              className="w-full sm:w-auto inline-flex items-center justify-center px-7 py-3 bg-primary text-white font-bold rounded-xl hover:bg-orange-600 active:scale-[0.98] transition-all text-sm disabled:opacity-70 disabled:cursor-not-allowed"
+            >
+              {financeSubmitting ? 'Joining Waitlist...' : 'Join Finance Waitlist'}
+            </button>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
