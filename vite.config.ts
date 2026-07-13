@@ -2,7 +2,7 @@ import { defineConfig } from 'vite'
 import path from 'path'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
-
+import Sitemap from 'vite-plugin-sitemap'
 
 function figmaAssetResolver() {
   return {
@@ -23,6 +23,9 @@ export default defineConfig({
     // Tailwind is not being actively used – do not remove them
     react(),
     tailwindcss(),
+    Sitemap({
+      hostname: 'https://www.toollinkk.com',
+    }),
   ],
   resolve: {
     alias: {
