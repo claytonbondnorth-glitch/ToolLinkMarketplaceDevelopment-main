@@ -20,6 +20,7 @@ import HelpPage from './pages/HelpPage';
 import SellerGuidePage from './pages/SellerGuidePage';
 import PricingPage from './pages/PricingPage';
 import ShippingTipsPage from './pages/ShippingTipsPage';
+import FinanceReferralDraftPage from './pages/FinanceReferralDraftPage';
 
 function SchemaErrorBanner() {
   const { schemaError } = useApp();
@@ -78,6 +79,7 @@ function AppContent() {
             {currentPage === 'seller'  && <SellerProfilePage />}
             {currentPage === 'messages'&& <MessagesPage />}
             {currentPage === 'admin'   && <AdminDashboard />}
+            {currentPage === 'finance-referral-draft' && <FinanceReferralDraftPage />}
             {currentPage === 'about'   && <AboutPage />}
             {currentPage === 'contact' && <ContactPage />}
             {currentPage === 'privacy' && <PrivacyPage />}

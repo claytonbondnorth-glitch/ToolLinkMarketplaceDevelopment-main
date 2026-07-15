@@ -5,7 +5,25 @@ import { CATEGORIES } from '../data/mockData';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-export type Page = 'home' | 'browse' | 'listing' | 'create' | 'profile' | 'seller' | 'messages' | 'admin' | 'auth' | 'about' | 'contact' | 'privacy' | 'terms' | 'help' | 'sellerGuide' | 'pricing' | 'shippingTips';
+export type Page =
+  | 'home'
+  | 'browse'
+  | 'listing'
+  | 'create'
+  | 'profile'
+  | 'seller'
+  | 'messages'
+  | 'admin'
+  | 'finance-referral-draft'
+  | 'about'
+  | 'contact'
+  | 'privacy'
+  | 'terms'
+  | 'help'
+  | 'sellerGuide'
+  | 'pricing'
+  | 'shippingTips'
+  | 'auth';
 export type AuthMode = 'login' | 'register' | 'forgot';
 
 const PAGE_TO_PATH: Record<Page, string> = {
@@ -17,6 +35,7 @@ const PAGE_TO_PATH: Record<Page, string> = {
   seller: '/seller',
   messages: '/messages',
   admin: '/admin',
+  'finance-referral-draft': '/admin/finance-referral-draft',
   auth: '/auth',
   about: '/about',
   contact: '/contact',
@@ -48,6 +67,8 @@ function pathToPage(pathname: string): Page {
       return 'messages';
     case '/admin':
       return 'admin';
+    case '/admin/finance-referral-draft':
+      return 'finance-referral-draft';
     case '/auth':
       return 'auth';
     case '/about':
