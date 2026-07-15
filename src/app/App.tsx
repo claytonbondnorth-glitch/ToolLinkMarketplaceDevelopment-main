@@ -50,7 +50,7 @@ function SchemaErrorBanner() {
 function AppContent() {
   const { currentPage, authLoading } = useApp();
 
-  const noFooterPages: (typeof currentPage)[] = ['messages', 'auth'];
+  const noFooterPages: (typeof currentPage)[] = ['auth'];
   const showFooter = !noFooterPages.includes(currentPage);
   const showMobileNav = currentPage !== 'auth';
 

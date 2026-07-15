@@ -175,7 +175,7 @@ export default function SellerProfilePage() {
           </div>
 
           {/* Stats */}
-          <div className="flex gap-6 mt-6 pt-6 border-t border-white/10">
+          <div className="flex flex-wrap gap-4 sm:gap-6 mt-6 pt-6 border-t border-white/10">
             <div>
               <p className="text-xl font-bold text-primary">{hasReviews ? formattedRating : '0.0'}</p>
               <p className="text-xs text-gray-400">Rating</p>

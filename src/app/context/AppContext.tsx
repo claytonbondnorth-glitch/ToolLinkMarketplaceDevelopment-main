@@ -157,6 +157,7 @@ interface NavParams {
   userId?: string;
   conversationId?: string;
   categoryId?: string;
+  mainCategory?: string;
 }
 
 interface NavigateOptions {
@@ -540,7 +541,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     if (!options?.preserveScroll) {
-      window.scrollTo({ top: 0, behavior: 'auto' });
+      window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+      });
     }
   }, []);
 

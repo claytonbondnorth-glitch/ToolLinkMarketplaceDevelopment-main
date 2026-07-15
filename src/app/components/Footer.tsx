@@ -4,14 +4,44 @@ import { useApp } from '../context/AppContext';
 export default function Footer() {
   const { navigate } = useApp();
 
+  const handleInternalLinkClick = (
+    event: React.MouseEvent<HTMLAnchorElement>,
+    action: () => void
+  ) => {
+    const isModifiedClick = event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0;
+    if (isModifiedClick) return;
+    event.preventDefault();
+    action();
+  };
+
+  const buyLinks = [
+    { label: 'Trade Tools & Equipment', href: '/browse', action: () => navigate('browse', { mainCategory: 'Trade Tools & Equipment' }) },
+    { label: 'Civil & Construction Equipment', href: '/browse', action: () => navigate('browse', { mainCategory: 'Civil & Construction Equipment' }) },
+    { label: 'Automotive & Workshop', href: '/browse', action: () => navigate('browse', { mainCategory: 'Automotive & Workshop' }) },
+  ];
+
+  const sellLinks = [
+    { label: 'Create a Listing', href: '/create', action: () => navigate('create') },
+    { label: 'Seller Guide', href: '/seller-guide', action: () => navigate('sellerGuide') },
+  ];
+
+  const companyLinks = [
+    { label: 'About Us', href: '/about', action: () => navigate('about') },
+    { label: 'Contact', href: '/contact', action: () => navigate('contact') },
+    { label: 'Privacy Policy', href: '/privacy', action: () => navigate('privacy') },
+    { label: 'Terms of Use', href: '/terms', action: () => navigate('terms') },
+    { label: 'Help Centre', href: '/help', action: () => navigate('help') },
+  ];
+
   return (
-    <footer className="bg-[#111111] text-white">
+    <footer className="bg-[#111111] text-white pb-[calc(env(safe-area-inset-bottom,0px)+76px)] md:pb-0">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-14">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10">
           {/* Brand */}
           <div className="lg:col-span-2">
-            <button
-              onClick={() => navigate('home')}
+            <a
+              href="/"
+              onClick={(event) => handleInternalLinkClick(event, () => navigate('home'))}
               className="flex items-center gap-2 mb-4 group"
             >
               <div className="w-9 h-9 bg-primary rounded-lg flex items-center justify-center">
@@ -20,7 +50,7 @@ export default function Footer() {
               <span className="text-xl font-bold">
                 Tool<span className="text-primary">Link</span>
               </span>
-            </button>
+            </a>
             <p className="text-sm text-gray-400 max-w-xs leading-relaxed">
               Australia&apos;s trusted marketplace for tradies to buy, sell and discover quality professional tools and construction equipment. Built for the industry, by people who understand it.
             </p>
@@ -30,20 +60,15 @@ export default function Footer() {
           <div>
             <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-300 mb-4">Buy</h4>
             <ul className="space-y-3">
-              {[
-                ['Browse Listings', () => navigate('browse')],
-                ['Power Tools', () => navigate('browse', { categoryId: 'power-tools' })],
-                ['Hand Tools', () => navigate('browse', { categoryId: 'hand-tools' })],
-                ['Heavy Equipment', () => navigate('browse', { categoryId: 'heavy-equipment' })],
-                ['Saved Listings', () => navigate('profile')],
-              ].map(([label, action]) => (
-                <li key={label as string}>
-                  <button
-                    onClick={action as () => void}
-                    className="text-sm text-gray-400 hover:text-primary transition-colors"
+              {buyLinks.map((link) => (
+                <li key={link.label}>
+                  <a
+                    href={link.href}
+                    onClick={(event) => handleInternalLinkClick(event, link.action)}
+                    className="block py-1.5 text-sm text-gray-400 hover:text-primary transition-colors min-h-[36px] whitespace-nowrap"
                   >
-                    {label as string}
-                  </button>
+                    {link.label}
+                  </a>
                 </li>
               ))}
             </ul>
@@ -53,19 +78,15 @@ export default function Footer() {
           <div>
             <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-300 mb-4">Sell</h4>
             <ul className="space-y-3">
-              {[
-                ['Create a Listing', () => navigate('create')],
-                ['Seller Guide', () => navigate('sellerGuide')],
-                ['Pricing', () => navigate('pricing')],
-                ['Shipping Tips', () => navigate('shippingTips')],
-              ].map(([label, action]) => (
-                <li key={label as string}>
-                  <button
-                    onClick={action as () => void}
-                    className="text-sm text-gray-400 hover:text-primary transition-colors"
+              {sellLinks.map((link) => (
+                <li key={link.label}>
+                  <a
+                    href={link.href}
+                    onClick={(event) => handleInternalLinkClick(event, link.action)}
+                    className="block py-1.5 text-sm text-gray-400 hover:text-primary transition-colors min-h-[36px] whitespace-nowrap"
                   >
-                    {label as string}
-                  </button>
+                    {link.label}
+                  </a>
                 </li>
               ))}
             </ul>
@@ -75,20 +96,15 @@ export default function Footer() {
           <div>
             <h4 className="text-sm font-semibold uppercase tracking-wider text-gray-300 mb-4">Company</h4>
             <ul className="space-y-3">
-              {[
-                ['About Us', () => navigate('about')],
-                ['Contact', () => navigate('contact')],
-                ['Privacy Policy', () => navigate('privacy')],
-                ['Terms of Use', () => navigate('terms')],
-                ['Help Centre', () => navigate('help')],
-              ].map(([label, action]) => (
-                <li key={label as string}>
-                  <button
-                    onClick={action as () => void}
-                    className="text-sm text-gray-400 hover:text-primary transition-colors"
+              {companyLinks.map((link) => (
+                <li key={link.label}>
+                  <a
+                    href={link.href}
+                    onClick={(event) => handleInternalLinkClick(event, link.action)}
+                    className="block py-1.5 text-sm text-gray-400 hover:text-primary transition-colors min-h-[36px] whitespace-nowrap"
                   >
-                    {label as string}
-                  </button>
+                    {link.label}
+                  </a>
                 </li>
               ))}
             </ul>

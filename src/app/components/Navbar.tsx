@@ -38,8 +38,8 @@ export default function Navbar() {
                 Categories <ChevronDown className="w-4 h-4" />
               </button>
               <div className="absolute top-full left-0 mt-1 bg-white border border-border rounded-xl shadow-lg py-2 min-w-[200px] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150">
-                {['Power Tools', 'Hand Tools', 'Heavy Equipment', 'Safety Gear', 'Measuring & Layout', 'Welding', 'Storage & Transport', 'Electrical'].map((cat, i) => {
-                  const ids = ['power-tools', 'hand-tools', 'heavy-equipment', 'safety-gear', 'measuring', 'welding', 'storage', 'electrical'];
+                {['Power Tools', 'Hand Tools', 'Heavy Equipment', 'Safety Gear', 'Measuring & Layout', 'Welding', 'Storage & Transport', 'Electrical', 'Automotive & Workshop'].map((cat, i) => {
+                  const ids = ['power-tools', 'hand-tools', 'heavy-equipment', 'safety-gear', 'measuring', 'welding', 'storage', 'electrical', 'automotive-workshop'];
                   return (
                     <button
                       key={cat}

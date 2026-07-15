@@ -458,7 +458,7 @@ export default function ProfilePage() {
           </div>
 
           {/* Stats */}
-          <div className="flex gap-6 border-b border-white/10">
+          <div className="flex gap-4 sm:gap-6 border-b border-white/10 justify-around sm:justify-start">
             <div className="py-3 text-center">
               <p className="text-lg font-bold text-primary">{myListings.length}</p>
               <p className="text-xs text-gray-400">Listings</p>
@@ -502,12 +502,12 @@ export default function ProfilePage() {
           </div>
 
           {/* Tabs */}
-          <div className="flex gap-0">
+          <div className="flex gap-0 overflow-x-auto">
             {(['listings', 'saved', 'settings'] as Tab[]).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
-                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors capitalize ${tab === t ? 'border-primary text-primary' : 'border-transparent text-gray-400 hover:text-white'}`}
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors capitalize whitespace-nowrap ${tab === t ? 'border-primary text-primary' : 'border-transparent text-gray-400 hover:text-white'}`}
               >
                 {t === 'listings' && <Package className="w-4 h-4 inline mr-1.5" />}
                 {t === 'saved' && <Heart className="w-4 h-4 inline mr-1.5" />}

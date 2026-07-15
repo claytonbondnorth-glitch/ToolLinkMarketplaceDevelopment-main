@@ -211,7 +211,7 @@ export default function MessagesPage() {
   };
 
   return (
-    <div className="h-[calc(100vh-64px)] bg-muted flex overflow-hidden">
+    <div className="h-[calc(100dvh-64px-72px)] md:h-[calc(100dvh-64px)] bg-muted flex overflow-hidden">
       {/* Conversation list */}
       <div className={`${activeConvId ? 'hidden sm:flex' : 'flex'} flex-col w-full sm:w-80 lg:w-96 bg-white border-r border-border flex-shrink-0`}>
         <div className="px-4 py-4 border-b border-border">
@@ -433,19 +433,19 @@ export default function MessagesPage() {
             )}
 
             {/* Input */}
-            <div className="bg-white border-t border-[#EBEBEB] px-4 py-3 flex-shrink-0">
+            <div className="bg-white border-t border-[#EBEBEB] px-4 py-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] flex-shrink-0">
               {/* Offer panel */}
               {showOffer && (
                 <div className="mb-3 p-4 bg-green-50 border border-green-200 rounded-2xl">
                   <p className="text-xs font-bold text-green-800 mb-2 flex items-center gap-1.5"><Tag className="w-3.5 h-3.5" /> Make an Offer</p>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <div className="relative flex-1">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-foreground">$</span>
                       <input type="number" value={offerPrice} onChange={(e) => setOfferPrice(e.target.value)} placeholder="Enter amount"
                         className="w-full pl-7 pr-3 py-2.5 rounded-xl border border-green-300 bg-white text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-green-400" />
                     </div>
-                    <button onClick={handleSendOffer} disabled={!offerPrice} className="px-4 py-2.5 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700 transition-colors text-sm disabled:opacity-40">Send</button>
-                    <button onClick={() => setShowOffer(false)} className="px-3 py-2.5 border border-green-200 text-green-700 rounded-xl hover:bg-green-100 transition-colors text-xs font-medium">Cancel</button>
+                    <button onClick={handleSendOffer} disabled={!offerPrice} className="px-4 py-2.5 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700 transition-colors text-sm disabled:opacity-40 flex-shrink-0">Send</button>
+                    <button onClick={() => setShowOffer(false)} className="px-3 py-2.5 border border-green-200 text-green-700 rounded-xl hover:bg-green-100 transition-colors text-xs font-medium flex-shrink-0">Cancel</button>
                   </div>
                 </div>
               )}

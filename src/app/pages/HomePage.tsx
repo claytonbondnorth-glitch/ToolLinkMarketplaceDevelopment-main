@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, ArrowRight, Shield, CheckCircle, MessageCircle, MapPin, Star, Zap, TrendingUp, ChevronRight, ChevronDown } from 'lucide-react';
+import { Search, ArrowRight, Shield, CheckCircle, MessageCircle, MapPin, Star, Zap, TrendingUp, ChevronRight, ChevronDown, Wrench, Truck, CarFront } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '../context/AppContext';
-import { CATEGORIES } from '../data/mockData';
 import ListingCard from '../components/ListingCard';
 import UserAvatar from '../components/UserAvatar';
 import { supabase } from '../../lib/supabase';
@@ -79,6 +78,33 @@ const featureHighlights = [
     description: 'Buy and sell professional tools anywhere across Australia.',
   },
 ];
+
+const HOMEPAGE_MAIN_CATEGORIES = [
+  {
+    name: 'Trade Tools & Equipment',
+    description: 'Power tools, hand tools, trade kits, storage and specialist equipment.',
+    icon: Wrench,
+    mainCategory: 'Trade Tools & Equipment',
+    image: '/assets/category-cards/trade-tools-equipment.jpg',
+    imageLabel: 'Tradie workshop with professional power tools and hand tools',
+  },
+  {
+    name: 'Civil & Construction Equipment',
+    description: 'Site equipment, machinery, lifting, concrete and construction gear.',
+    icon: Truck,
+    mainCategory: 'Civil & Construction Equipment',
+    image: '/assets/category-cards/civil-construction-equipment.jpg',
+    imageLabel: 'Construction site machinery and civil equipment',
+  },
+  {
+    name: 'Automotive & Workshop',
+    description: 'Mechanic tools, diagnostics, workshop equipment and vehicle maintenance gear.',
+    icon: CarFront,
+    mainCategory: 'Automotive & Workshop',
+    image: '/assets/category-cards/automotive-workshop.jpg',
+    imageLabel: 'Automotive workshop tools and vehicle service equipment',
+  },
+] as const;
 
 export default function HomePage() {
   const { navigate, openAuth, currentUser, listings } = useApp();
@@ -244,12 +270,6 @@ export default function HomePage() {
   const browseListingsCtaLabel = activeListingCount > 0
     ? `Browse All ${activeListingCount.toLocaleString()} Listings`
     : 'Browse Current Listings';
-  const getCategoryListingLabel = (count: number) => (count > 0 ? `${count.toLocaleString()} listings` : 'Listings coming soon');
-  const categoryCounts = activeListings.reduce<Record<string, number>>((acc, listing) => {
-    if (!listing.categoryId) return acc;
-    acc[listing.categoryId] = (acc[listing.categoryId] ?? 0) + 1;
-    return acc;
-  }, {});
 
   const featuredListings = listings.filter((l) => l.featured || l.status === 'active').slice(0, 6);
   const filtered = SUGGESTIONS.filter((s) => query && s.toLowerCase().includes(query.toLowerCase()));
@@ -580,31 +600,38 @@ export default function HomePage() {
           <div className="text-center mb-12">
             <p className="text-xs font-bold text-primary uppercase tracking-widest mb-2">Every Trade</p>
             <h2 className="text-3xl sm:text-4xl font-extrabold text-foreground">Browse by Category</h2>
-            <p className="text-muted-foreground mt-2">Find exactly what you need across all trade categories</p>
+            <p className="text-muted-foreground mt-2">Start with a main category, then choose a subcategory in Browse Listings.</p>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-            {CATEGORIES.map((cat) => (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+            {HOMEPAGE_MAIN_CATEGORIES.map((category) => {
+              const Icon = category.icon;
+
+              return (
               <button
-                key={cat.id}
-                onClick={() => navigate('browse', { categoryId: cat.id })}
-                className="group relative rounded-2xl overflow-hidden aspect-[4/3] bg-[#111111] cursor-pointer border-2 border-transparent hover:border-primary transition-all duration-300"
+                key={category.name}
+                onClick={() => navigate('browse', { mainCategory: category.mainCategory })}
+                aria-label={`${category.name}. ${category.description}. Background: ${category.imageLabel}.`}
+                className="group relative w-full text-left rounded-2xl border border-border overflow-hidden transition-all duration-300 min-h-[176px] sm:min-h-[190px] hover:border-primary/40 hover:shadow-xl hover:shadow-primary/10 active:scale-[0.99]"
               >
-                <img
-                  src={cat.image}
-                  alt={cat.name}
-                  className="absolute inset-0 w-full h-full object-cover opacity-55 group-hover:opacity-40 group-hover:scale-110 transition-all duration-500"
+                <div
+                  className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-transform duration-500 group-hover:scale-105"
+                  style={{ backgroundImage: `url(${category.image})` }}
+                  aria-hidden="true"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
-                <div className="absolute inset-0 flex flex-col justify-end p-4 text-left">
-                  <h3 className="text-white font-bold text-sm sm:text-base leading-tight">{cat.name}</h3>
-                  <p className="text-gray-300 text-xs mt-0.5">{getCategoryListingLabel(categoryCounts[cat.id] ?? 0)}</p>
-                </div>
-                <div className="absolute inset-0 border-2 border-primary rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                <div className="absolute top-3 right-3 w-7 h-7 bg-primary rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 shadow-lg">
-                  <ArrowRight className="w-3.5 h-3.5 text-white" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/88 via-black/56 to-black/30" aria-hidden="true" />
+                <div className="relative p-5 sm:p-6 h-full flex flex-col">
+                  <div className="w-11 h-11 rounded-xl bg-white/10 border border-white/25 text-white flex items-center justify-center mb-4 flex-shrink-0 backdrop-blur-sm">
+                    <Icon className="w-5 h-5" />
+                  </div>
+                  <h3 className="text-white font-bold text-lg leading-tight break-words">{category.name}</h3>
+                  <p className="text-white/90 text-sm mt-2 leading-relaxed">{category.description}</p>
+                  <div className="mt-auto pt-4 inline-flex items-center gap-2 text-sm font-semibold text-white">
+                    Browse category <ArrowRight className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-0.5" />
+                  </div>
                 </div>
               </button>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>

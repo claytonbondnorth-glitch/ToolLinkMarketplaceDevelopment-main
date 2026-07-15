@@ -135,14 +135,14 @@ export default function ListingDetailPage() {
       {/* Breadcrumb */}
       <div className="bg-white border-b border-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3">
-          <nav className="flex items-center gap-2 text-sm text-muted-foreground">
+          <nav className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             <button onClick={() => navigate('home')} className="hover:text-primary transition-colors">Home</button>
             <span>/</span>
             <button onClick={() => navigate('browse')} className="hover:text-primary transition-colors">Browse</button>
             <span>/</span>
             <button onClick={() => navigate('browse', { categoryId: listing.categoryId })} className="hover:text-primary transition-colors">{listing.category}</button>
             <span>/</span>
-            <span className="text-foreground truncate max-w-xs">{listing.title}</span>
+            <span className="text-foreground truncate max-w-[70vw] sm:max-w-xs">{listing.title}</span>
           </nav>
         </div>
       </div>
@@ -374,7 +374,7 @@ export default function ListingDetailPage() {
       {showSoldModal && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowSoldModal(false)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
               <div>
                 <h3 className="font-bold text-foreground">Mark as sold</h3>
@@ -411,7 +411,7 @@ export default function ListingDetailPage() {
       {showContact && seller && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowContact(false)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
             {sent ? (
               <div className="text-center py-6">
                 <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -456,7 +456,7 @@ export default function ListingDetailPage() {
       {showReportModal && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowReportModal(false)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6">
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
               <div>
                 <h3 className="font-bold text-foreground">Report this listing</h3>

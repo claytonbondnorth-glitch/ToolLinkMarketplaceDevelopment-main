@@ -348,7 +348,7 @@ export default function AdminDashboard() {
       {/* Header */}
       <div className="bg-[#111111] text-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center gap-3 sm:gap-4 justify-between">
             <div>
               <h1 className="text-2xl font-bold">Admin Dashboard</h1>
               <p className="text-sm text-gray-400 mt-0.5">ToolLink Platform Management</p>

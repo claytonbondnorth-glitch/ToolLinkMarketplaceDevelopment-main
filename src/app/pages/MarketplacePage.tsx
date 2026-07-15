@@ -13,10 +13,12 @@ const SORT_OPTIONS = [
   { value: 'price-desc', label: 'Price: High to Low' },
   { value: 'views', label: 'Most Popular' },
 ];
+const MAIN_CATEGORY_ORDER = ['Trade Tools & Equipment', 'Civil & Construction Equipment', 'Automotive & Workshop'] as const;
 
 interface Filters {
   query: string;
-  categoryId: string;
+  mainCategory: string;
+  selectedSubcategoryIds: string[];
   brand: string;
   condition: string;
   state: string;
@@ -76,9 +78,20 @@ export default function MarketplacePage() {
   } = useApp();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(() => {
+    if (navParams.mainCategory) return navParams.mainCategory;
+    const selected = CATEGORIES.find((category) => category.id === navParams.categoryId);
+    return selected?.group ?? MAIN_CATEGORY_ORDER[0];
+  });
   const [filters, setFilters] = useState<Filters>({
     query: '',
-    categoryId: navParams.categoryId ?? '',
+    mainCategory: (() => {
+      if (navParams.mainCategory) return navParams.mainCategory;
+      if (!navParams.categoryId) return '';
+      const selected = CATEGORIES.find((category) => category.id === navParams.categoryId);
+      return selected?.group ?? '';
+    })(),
+    selectedSubcategoryIds: navParams.categoryId ? [navParams.categoryId] : [],
     brand: '',
     condition: '',
     state: '',
@@ -226,7 +239,17 @@ export default function MarketplacePage() {
         (l) => l.title.toLowerCase().includes(q) || l.brand.toLowerCase().includes(q) || l.description.toLowerCase().includes(q)
       );
     }
-    if (filters.categoryId) result = result.filter((l) => l.categoryId === filters.categoryId);
+    if (filters.mainCategory) {
+      const groupedCategoryIds = new Set(
+        CATEGORIES
+          .filter((category) => category.group === filters.mainCategory)
+          .map((category) => category.id)
+      );
+      result = result.filter((l) => groupedCategoryIds.has(l.categoryId));
+    }
+    if (filters.selectedSubcategoryIds.length > 0) {
+      result = result.filter((l) => filters.selectedSubcategoryIds.includes(l.categoryId));
+    }
     if (filters.brand) result = result.filter((l) => l.brand === filters.brand);
     if (filters.condition) result = result.filter((l) => l.condition === filters.condition);
     if (filters.state) result = result.filter((l) => l.state === filters.state);
@@ -240,14 +263,60 @@ export default function MarketplacePage() {
     }
   }, [activeListings, filters, appliedPriceRange.minPrice, appliedPriceRange.maxPrice]);
 
-  const activeCategory = CATEGORIES.find((c) => c.id === filters.categoryId);
+  const activeCategory = filters.selectedSubcategoryIds.length === 1
+    ? CATEGORIES.find((c) => c.id === filters.selectedSubcategoryIds[0])
+    : null;
+  const activeMainCategory = filters.mainCategory || activeCategory?.group || '';
+  const groupedCategories = useMemo(
+    () => MAIN_CATEGORY_ORDER.map((group) => ({
+      group,
+      items: CATEGORIES.filter((category) => category.group === group && !category.isPrimary),
+    })),
+    []
+  );
+
+  useEffect(() => {
+    const firstSelectedSubcategoryId = filters.selectedSubcategoryIds[0];
+    if (!firstSelectedSubcategoryId) return;
+    const selectedGroup = CATEGORIES.find((category) => category.id === firstSelectedSubcategoryId)?.group;
+
+    if (selectedGroup && expandedGroup !== selectedGroup) {
+      setExpandedGroup(selectedGroup);
+    }
+  }, [filters.selectedSubcategoryIds, expandedGroup]);
+
+  useEffect(() => {
+    const nextCategoryId = navParams.categoryId ?? '';
+    const nextMainCategory = navParams.mainCategory ?? (
+      nextCategoryId
+        ? (CATEGORIES.find((category) => category.id === nextCategoryId)?.group ?? '')
+        : ''
+    );
+    const nextSelectedSubcategoryIds = nextCategoryId ? [nextCategoryId] : [];
+
+    setFilters((prev) => {
+      if (
+        prev.mainCategory === nextMainCategory
+        && prev.selectedSubcategoryIds.length === nextSelectedSubcategoryIds.length
+        && prev.selectedSubcategoryIds.every((id, index) => id === nextSelectedSubcategoryIds[index])
+      ) {
+        return prev;
+      }
+      return { ...prev, mainCategory: nextMainCategory, selectedSubcategoryIds: nextSelectedSubcategoryIds };
+    });
+
+    if (nextMainCategory && expandedGroup !== nextMainCategory) {
+      setExpandedGroup(nextMainCategory);
+    }
+  }, [navParams.categoryId, navParams.mainCategory]);
+
   const clearFilters = () => {
-    updateFilters(() => ({ query: '', categoryId: '', brand: '', condition: '', state: '', minPrice: '', maxPrice: '', sort: 'recent' }));
+    updateFilters(() => ({ query: '', mainCategory: '', selectedSubcategoryIds: [], brand: '', condition: '', state: '', minPrice: '', maxPrice: '', sort: 'recent' }));
     setSearchDraft('');
     setPriceDraft({ minPrice: '', maxPrice: '' });
     setAppliedPriceRange({ minPrice: '', maxPrice: '' });
   };
-  const activeFilterCount = [filters.categoryId, filters.brand, filters.condition, filters.state, filters.minPrice, filters.maxPrice].filter(Boolean).length;
+  const activeFilterCount = [filters.selectedSubcategoryIds.length > 0 || filters.mainCategory, filters.brand, filters.condition, filters.state, filters.minPrice, filters.maxPrice].filter(Boolean).length;
   const handleSellTools = () => {
     if (currentUser) {
       navigate('create');
@@ -269,18 +338,70 @@ export default function MarketplacePage() {
       <div className="space-y-6">
         <div>
           <h3 className="text-sm font-semibold text-foreground mb-3">Category</h3>
-          <div className="space-y-1">
-            <button onClick={() => set('categoryId')('')} className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${!filters.categoryId ? 'bg-primary text-white font-medium' : 'text-foreground hover:bg-muted'}`}>All Categories</button>
-            {CATEGORIES.map((cat) => (
-              <button key={cat.id} onClick={() => set('categoryId')(cat.id)} className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${filters.categoryId === cat.id ? 'bg-primary text-white font-medium' : 'text-foreground hover:bg-muted'}`}>
-                <span>{cat.name}</span>
-                {(categoryCounts[cat.id] ?? 0) > 0 && (
-                  <span className={`text-xs ${filters.categoryId === cat.id ? 'text-white/70' : 'text-muted-foreground'}`}>
-                    {(categoryCounts[cat.id] ?? 0).toLocaleString()}
-                  </span>
-                )}
-              </button>
-            ))}
+          <div className="space-y-2">
+            <button onClick={() => updateFilters((prev) => ({ ...prev, mainCategory: '', selectedSubcategoryIds: [] }))} className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${!filters.mainCategory && filters.selectedSubcategoryIds.length === 0 ? 'bg-primary text-white font-medium' : 'text-foreground hover:bg-muted'}`}>All Categories</button>
+            {groupedCategories.map(({ group, items }) => {
+              const isExpanded = expandedGroup === group;
+              const isMainCategorySelected = filters.mainCategory === group;
+
+              return (
+                <div key={group} className="rounded-lg border border-border/70 bg-background/70">
+                  <button
+                    onClick={() => {
+                      setExpandedGroup((current) => (current === group ? null : group));
+                      updateFilters((prev) => {
+                        if (prev.mainCategory === group) {
+                          return prev;
+                        }
+                        return { ...prev, mainCategory: group, selectedSubcategoryIds: [] };
+                      });
+                    }}
+                    className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors rounded-lg ${isMainCategorySelected ? 'bg-primary text-white' : 'hover:bg-muted/60'}`}
+                  >
+                    <span className={`text-sm font-semibold whitespace-nowrap overflow-hidden text-ellipsis ${isMainCategorySelected ? 'text-white' : 'text-foreground'}`}>{group}</span>
+                    <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-0' : '-rotate-90'} ${isMainCategorySelected ? 'text-white/80' : 'text-muted-foreground'}`} />
+                  </button>
+
+                  {isExpanded && (
+                    <div className="px-2 pb-2 space-y-0.5">
+                      {items.map((cat) => (
+                        <button
+                          key={cat.id}
+                          onClick={() => updateFilters((prev) => {
+                            const isSelected = prev.selectedSubcategoryIds.includes(cat.id);
+                            return {
+                              ...prev,
+                              mainCategory: group,
+                              selectedSubcategoryIds: isSelected
+                                ? prev.selectedSubcategoryIds.filter((id) => id !== cat.id)
+                                : [...prev.selectedSubcategoryIds, cat.id],
+                            };
+                          })}
+                          title={cat.name}
+                          className={`w-full flex items-center justify-between gap-2 px-2.5 py-2 min-h-[40px] rounded-lg text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${filters.selectedSubcategoryIds.includes(cat.id) ? 'bg-primary text-white font-medium' : 'text-foreground hover:bg-muted'}`}
+                        >
+                          <span className="whitespace-nowrap overflow-hidden text-ellipsis">{cat.name}</span>
+                          {(categoryCounts[cat.id] ?? 0) > 0 && (
+                            <span className={`text-xs flex-shrink-0 ${filters.selectedSubcategoryIds.includes(cat.id) ? 'text-white/70' : 'text-muted-foreground'}`}>
+                              {(categoryCounts[cat.id] ?? 0).toLocaleString()}
+                            </span>
+                          )}
+                        </button>
+                      ))}
+
+                      {filters.mainCategory === group && filters.selectedSubcategoryIds.length > 0 && (
+                        <button
+                          onClick={() => updateFilters((prev) => ({ ...prev, selectedSubcategoryIds: [] }))}
+                          className="mt-2 w-full text-left px-2.5 py-2 text-xs font-semibold text-primary hover:underline"
+                        >
+                          Clear subcategories
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
         <div>
@@ -338,7 +459,7 @@ export default function MarketplacePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
           <div className="flex flex-col sm:flex-row sm:items-center gap-4">
             <div className="flex-1">
-              <h1 className="text-2xl font-bold text-foreground">{activeCategory ? activeCategory.name : 'All Listings'}</h1>
+              <h1 className="text-2xl font-bold text-foreground">{activeCategory ? activeCategory.name : (activeMainCategory || 'All Listings')}</h1>
               <p className="text-sm text-muted-foreground mt-0.5">Browse professional tools from tradies across Australia.</p>
             </div>
             <div className="flex items-center gap-2 flex-1 max-w-md bg-muted rounded-xl px-4 py-2.5">
@@ -359,21 +480,21 @@ export default function MarketplacePage() {
           </aside>
 
           <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between mb-5 bg-white rounded-xl border border-border px-4 py-3">
+            <div className="flex flex-wrap items-center gap-2 mb-5 bg-white rounded-xl border border-border px-4 py-3">
               <button onClick={() => setSidebarOpen(true)} className="lg:hidden flex items-center gap-2 text-sm font-medium text-foreground hover:text-primary transition-colors">
                 <SlidersHorizontal className="w-4 h-4" />
                 Filters
                 {activeFilterCount > 0 && <span className="w-5 h-5 bg-primary text-white text-xs rounded-full flex items-center justify-center">{activeFilterCount}</span>}
               </button>
-              <div className="flex items-center gap-2 ml-auto">
-                <div className="flex items-center gap-1 text-sm text-muted-foreground mr-2">
+              <div className="flex items-center gap-2 w-full justify-end sm:w-auto sm:ml-auto min-w-0">
+                <div className="flex items-center gap-1 text-sm text-muted-foreground mr-1 min-w-0">
                   <span>Sort:</span>
-                  <select value={filters.sort} onChange={(e) => set('sort')(e.target.value)} className="border-none bg-transparent text-sm font-medium text-foreground focus:outline-none cursor-pointer">
+                  <select value={filters.sort} onChange={(e) => set('sort')(e.target.value)} className="border-none bg-transparent text-sm font-medium text-foreground focus:outline-none cursor-pointer max-w-[120px] sm:max-w-none truncate">
                     {SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
                   <ChevronDown className="w-3 h-3" />
                 </div>
-                <div className="flex items-center gap-1 border border-border rounded-lg p-0.5">
+                <div className="flex items-center gap-1 border border-border rounded-lg p-0.5 flex-shrink-0">
                   <button onClick={() => setViewMode('grid')} className={`p-1.5 rounded-md transition-colors ${viewMode === 'grid' ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground'}`}><Grid3X3 className="w-4 h-4" /></button>
                   <button onClick={() => setViewMode('list')} className={`p-1.5 rounded-md transition-colors ${viewMode === 'list' ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground'}`}><List className="w-4 h-4" /></button>
                 </div>
@@ -382,7 +503,13 @@ export default function MarketplacePage() {
 
             {activeFilterCount > 0 && (
               <div className="flex flex-wrap gap-2 mb-4">
-                {filters.categoryId && <span className="flex items-center gap-1 bg-primary/10 text-primary text-xs font-medium px-3 py-1 rounded-full">{CATEGORIES.find((c) => c.id === filters.categoryId)?.name}<button onClick={() => set('categoryId')('')}><X className="w-3 h-3" /></button></span>}
+                {filters.mainCategory && <span className="flex items-center gap-1 bg-primary/10 text-primary text-xs font-medium px-3 py-1 rounded-full">{filters.mainCategory}<button onClick={() => updateFilters((prev) => ({ ...prev, mainCategory: '', selectedSubcategoryIds: [] }))}><X className="w-3 h-3" /></button></span>}
+                {filters.selectedSubcategoryIds.map((subcategoryId) => (
+                  <span key={subcategoryId} className="flex items-center gap-1 bg-primary/10 text-primary text-xs font-medium px-3 py-1 rounded-full">
+                    {CATEGORIES.find((c) => c.id === subcategoryId)?.name}
+                    <button onClick={() => updateFilters((prev) => ({ ...prev, selectedSubcategoryIds: prev.selectedSubcategoryIds.filter((id) => id !== subcategoryId) }))}><X className="w-3 h-3" /></button>
+                  </span>
+                ))}
                 {filters.brand && <span className="flex items-center gap-1 bg-primary/10 text-primary text-xs font-medium px-3 py-1 rounded-full">{filters.brand}<button onClick={() => set('brand')('')}><X className="w-3 h-3" /></button></span>}
                 {filters.condition && <span className="flex items-center gap-1 bg-primary/10 text-primary text-xs font-medium px-3 py-1 rounded-full">{filters.condition}<button onClick={() => set('condition')('')}><X className="w-3 h-3" /></button></span>}
                 {filters.state && <span className="flex items-center gap-1 bg-primary/10 text-primary text-xs font-medium px-3 py-1 rounded-full"><MapPin className="w-3 h-3" />{filters.state}<button onClick={() => set('state')('')}><X className="w-3 h-3" /></button></span>}
@@ -393,20 +520,9 @@ export default function MarketplacePage() {
             {filtered.length === 0 ? (
               <div className="bg-white rounded-xl border border-border p-16 text-center">
                 <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4"><Search className="w-8 h-8 text-muted-foreground" /></div>
-                <h3 className="font-bold text-foreground mb-2">No listings match your filters</h3>
-                <p className="text-sm text-muted-foreground mb-5 max-w-xl mx-auto">Try adjusting your price range, category or search terms.</p>
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-8">
-                  <button onClick={handleSellTools} className="px-5 py-2 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-orange-600 transition-colors">Sell Your Tools</button>
-                  <button onClick={handleBrowseCategories} className="px-5 py-2 bg-muted text-foreground text-sm font-semibold rounded-xl hover:bg-accent transition-colors">Browse Categories</button>
-                </div>
-                {activeFilterCount > 0 && (
-                  <button onClick={clearFilters} className="px-4 py-1.5 text-xs text-destructive border border-destructive/30 rounded-lg hover:bg-red-50 transition-colors mb-8">Clear Filters</button>
-                )}
-                <div className="pt-8 border-t border-border max-w-2xl mx-auto">
-                  <h4 className="text-base font-bold text-foreground mb-2">Ready to sell?</h4>
-                  <p className="text-sm text-muted-foreground mb-4">List your first tool in under two minutes and reach buyers across Australia.</p>
-                  <button onClick={handleSellTools} className="px-5 py-2 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-orange-600 transition-colors">Create Your First Listing</button>
-                </div>
+                <h3 className="font-bold text-foreground mb-2">Listings coming soon</h3>
+                <p className="text-sm text-muted-foreground mb-8 max-w-xl mx-auto">ToolLink is growing, and new listings are being added regularly. Check back soon or create a free listing.</p>
+                <button onClick={handleSellTools} className="px-5 py-2 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-orange-600 transition-colors">Create a Listing</button>
               </div>
             ) : viewMode === 'grid' ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
