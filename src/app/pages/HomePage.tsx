@@ -241,6 +241,10 @@ export default function HomePage() {
 
   const activeListings = listings.filter((l) => l.status === 'active');
   const activeListingCount = activeListings.length;
+  const browseListingsCtaLabel = activeListingCount > 0
+    ? `Browse All ${activeListingCount.toLocaleString()} Listings`
+    : 'Browse Current Listings';
+  const getCategoryListingLabel = (count: number) => (count > 0 ? `${count.toLocaleString()} listings` : 'Listings coming soon');
   const categoryCounts = activeListings.reduce<Record<string, number>>((acc, listing) => {
     if (!listing.categoryId) return acc;
     acc[listing.categoryId] = (acc[listing.categoryId] ?? 0) + 1;
@@ -564,7 +568,7 @@ export default function HomePage() {
               onClick={() => navigate('browse')}
               className="inline-flex items-center gap-2 px-8 py-3.5 border-2 border-[#111111] text-[#111111] font-bold rounded-2xl hover:bg-[#111111] hover:text-white transition-all text-sm"
             >
-              Browse All {activeListingCount.toLocaleString()} Listings <ArrowRight className="w-4 h-4" />
+              {browseListingsCtaLabel} <ArrowRight className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -593,7 +597,7 @@ export default function HomePage() {
                 <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
                 <div className="absolute inset-0 flex flex-col justify-end p-4 text-left">
                   <h3 className="text-white font-bold text-sm sm:text-base leading-tight">{cat.name}</h3>
-                  <p className="text-gray-300 text-xs mt-0.5">{(categoryCounts[cat.id] ?? 0).toLocaleString()} listings</p>
+                  <p className="text-gray-300 text-xs mt-0.5">{getCategoryListingLabel(categoryCounts[cat.id] ?? 0)}</p>
                 </div>
                 <div className="absolute inset-0 border-2 border-primary rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 <div className="absolute top-3 right-3 w-7 h-7 bg-primary rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 shadow-lg">
