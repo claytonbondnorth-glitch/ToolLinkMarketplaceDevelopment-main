@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ShieldAlert, FileText, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '../context/AppContext';
@@ -35,6 +35,24 @@ const INTENDED_USE_OPTIONS: { value: Exclude<IntendedUse, ''>; label: string }[]
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+type FinanceReferralDraftRecord = {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  phone: string | null;
+  applicant_type: string | null;
+  state: string | null;
+  equipment_description: string | null;
+  purchase_price: number | string | null;
+  finance_amount: number | string | null;
+  intended_use: string | null;
+  preferred_contact_time: string | null;
+  wants_broker_contact: boolean | null;
+  consent_to_share: boolean | null;
+  draft_status: string | null;
+  created_at: string;
+};
+
 export default function FinanceReferralDraftPage() {
   const { currentUser, navigate } = useApp();
   const [fullName, setFullName] = useState(currentUser?.name ?? '');
@@ -50,6 +68,32 @@ export default function FinanceReferralDraftPage() {
   const [wantsBrokerContact, setWantsBrokerContact] = useState(false);
   const [consentsToSharing, setConsentsToSharing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [drafts, setDrafts] = useState<FinanceReferralDraftRecord[]>([]);
+  const [loadingDrafts, setLoadingDrafts] = useState(false);
+
+  const loadDrafts = async () => {
+    setLoadingDrafts(true);
+
+    const { data, error } = await supabase
+      .from('finance_referral_drafts')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      toast.error('Unable to load saved draft enquiries.');
+      setDrafts([]);
+      setLoadingDrafts(false);
+      return;
+    }
+
+    setDrafts((data ?? []) as FinanceReferralDraftRecord[]);
+    setLoadingDrafts(false);
+  };
+
+  useEffect(() => {
+    if (!currentUser?.isAdmin) return;
+    void loadDrafts();
+  }, [currentUser?.isAdmin]);
 
   const resetForm = () => {
     setFullName('');
@@ -157,11 +201,13 @@ export default function FinanceReferralDraftPage() {
 
     if (error) {
       toast.error('Unable to save draft enquiry right now. Please try again.');
+      setSaving(false);
       return;
     }
 
     toast.success('Draft enquiry saved.');
     resetForm();
+    await loadDrafts();
   };
 
   if (!currentUser?.isAdmin) {
@@ -344,6 +390,58 @@ export default function FinanceReferralDraftPage() {
               </Button>
             </div>
           </form>
+        </div>
+
+        <div className="bg-white rounded-xl border border-border p-6">
+          <div className="flex items-center justify-between gap-3 mb-5">
+            <div>
+              <h3 className="font-bold text-foreground">Saved Draft Enquiries</h3>
+              <p className="text-sm text-muted-foreground mt-1">Latest saved referral drafts from the finance team.</p>
+            </div>
+            <Button type="button" variant="outline" onClick={() => void loadDrafts()} className="border-border bg-white">
+              Refresh
+            </Button>
+          </div>
+
+          {loadingDrafts ? (
+            <div className="rounded-xl border border-border bg-muted/30 px-4 py-8 text-center text-sm text-muted-foreground">
+              Loading saved draft enquiries...
+            </div>
+          ) : drafts.length === 0 ? (
+            <div className="rounded-xl border border-border bg-muted/30 px-4 py-8 text-center text-sm text-muted-foreground">
+              No finance referral drafts have been saved yet.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {drafts.map((draft) => (
+                <div key={draft.id} className="rounded-xl border border-border bg-muted/20 p-5 shadow-sm">
+                  <div className="flex items-start justify-between gap-3 mb-4">
+                    <div>
+                      <h4 className="font-bold text-foreground">{draft.full_name || 'Unnamed draft'}</h4>
+                      <p className="text-xs text-muted-foreground mt-1">Created {new Date(draft.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                    </div>
+                    <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-primary/10 text-primary">
+                      {draft.draft_status || 'draft'}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                    <div><span className="text-muted-foreground">Email:</span> <span className="text-foreground font-medium">{draft.email || '-'}</span></div>
+                    <div><span className="text-muted-foreground">Phone:</span> <span className="text-foreground font-medium">{draft.phone || '-'}</span></div>
+                    <div><span className="text-muted-foreground">Applicant type:</span> <span className="text-foreground font-medium">{draft.applicant_type || '-'}</span></div>
+                    <div><span className="text-muted-foreground">State:</span> <span className="text-foreground font-medium">{draft.state || '-'}</span></div>
+                    <div className="sm:col-span-2"><span className="text-muted-foreground">Equipment description:</span> <span className="text-foreground font-medium">{draft.equipment_description || '-'}</span></div>
+                    <div><span className="text-muted-foreground">Purchase price:</span> <span className="text-foreground font-medium">{draft.purchase_price ?? '-'}</span></div>
+                    <div><span className="text-muted-foreground">Finance amount:</span> <span className="text-foreground font-medium">{draft.finance_amount ?? '-'}</span></div>
+                    <div><span className="text-muted-foreground">Intended use:</span> <span className="text-foreground font-medium">{draft.intended_use || '-'}</span></div>
+                    <div><span className="text-muted-foreground">Preferred contact time:</span> <span className="text-foreground font-medium">{draft.preferred_contact_time || '-'}</span></div>
+                    <div><span className="text-muted-foreground">Broker contact consent:</span> <span className="text-foreground font-medium">{draft.wants_broker_contact ? 'Yes' : 'No'}</span></div>
+                    <div><span className="text-muted-foreground">Information-sharing consent:</span> <span className="text-foreground font-medium">{draft.consent_to_share ? 'Yes' : 'No'}</span></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
