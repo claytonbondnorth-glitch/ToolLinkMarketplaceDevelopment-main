@@ -365,12 +365,6 @@ export default function AdminDashboard() {
               <RefreshCw className={`w-3.5 h-3.5 ${statsLoading ? 'animate-spin' : ''}`} />
               Refresh Analytics
             </button>
-            <button
-              onClick={() => navigate('finance-referral-draft')}
-              className="flex items-center gap-2 text-xs text-gray-200 bg-white/10 px-3 py-2 rounded-xl hover:bg-white/20 transition-colors"
-            >
-              Finance Referral Draft
-            </button>
           </div>
 
           {statsError && (

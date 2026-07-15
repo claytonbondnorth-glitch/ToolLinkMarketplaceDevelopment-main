@@ -14,7 +14,6 @@ export type Page =
   | 'seller'
   | 'messages'
   | 'admin'
-  | 'finance-referral-draft'
   | 'about'
   | 'contact'
   | 'privacy'
@@ -35,7 +34,6 @@ const PAGE_TO_PATH: Record<Page, string> = {
   seller: '/seller',
   messages: '/messages',
   admin: '/admin',
-  'finance-referral-draft': '/admin/finance-referral-draft',
   auth: '/auth',
   about: '/about',
   contact: '/contact',
@@ -67,8 +65,6 @@ function pathToPage(pathname: string): Page {
       return 'messages';
     case '/admin':
       return 'admin';
-    case '/admin/finance-referral-draft':
-      return 'finance-referral-draft';
     case '/auth':
       return 'auth';
     case '/about':
